@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHPaibot - Proactive Chat</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f9;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #chat-container {
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .message .sender {
+            font-weight: bold;
+            font-size: 0.9em;
+            margin-bottom: 4px;
+            color: #333;
+        }
+        .message .text {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            line-height: 1.5;
+        }
+        .ai-message .sender {
+            color: #007bff;
+        }
+        .ai-message .text {
+            background-color: #e9f5ff;
+            color: #333;
+            align-self: flex-start;
+        }
+        .user-message {
+            align-items: flex-end;
+        }
+        .user-message .sender {
+            color: #28a745;
+        }
+        .user-message .text {
+            background-color: #28a745;
+            color: #fff;
+            align-self: flex-end;
+        }
+        .error-message {
+            text-align: center;
+            color: #dc3545;
+            font-style: italic;
+            padding: 10px;
+        }
+        #input-area {
+            display: flex;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+        #message-input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            padding: 10px 15px;
+            font-size: 1em;
+            outline: none;
+        }
+        #message-input:focus {
+            border-color: #007bff;
+        }
+        #send-button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-size: 1.2em;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            padding: 5px 15px;
+            font-size: 0.8em;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <div id="status">Connecting...</div>
+    <div id="chat-box"></div>
+    <div id="input-area">
+        <input type="text" id="message-input" placeholder="Type a message...">
+        <button id="send-button" title="Send">&#10148;</button>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const chatBox = document.getElementById('chat-box');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const statusDiv = document.getElementById('status');
+        const userId = 'user_' + Date.now(); // Simple unique ID for the user session
+        let isTyping = false;
+
+        // --- WebSocket for Server-Pushed Messages ---
+        const ws = new WebSocket('ws://localhost:3000');
+
+        ws.onopen = () => {
+            console.log('WebSocket connection established');
+            statusDiv.textContent = 'Connected';
+            statusDiv.style.color = '#28a745';
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.sender && data.message) {
+                    addMessage(data.sender, data.message);
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket connection closed');
+            statusDiv.textContent = 'Disconnected. Please refresh.';
+            statusDiv.style.color = '#dc3545';
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            statusDiv.textContent = 'Connection Error';
+            statusDiv.style.color = '#dc3545';
+        };
+
+        // --- Fetch for User-Sent Messages ---
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            addMessage('You', message);
+            messageInput.value = '';
+            isTyping = false; // Reset typing flag after sending
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        userId: userId,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data.message) {
+                    addMessage('AI', data.message);
+                }
+
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessage('Error', `Sorry, there was an error processing your request. (${error.message})`);
+            }
+        }
+
+        function addMessage(sender, message) {
+            const messageDiv = document.createElement('div');
+            
+            if (sender === 'Error') {
+                messageDiv.classList.add('error-message');
+                messageDiv.textContent = message;
+            } else {
+                const senderDiv = document.createElement('div');
+                const textDiv = document.createElement('div');
+
+                messageDiv.classList.add('message');
+                senderDiv.classList.add('sender');
+                textDiv.classList.add('text');
+
+                senderDiv.textContent = sender;
+                textDiv.textContent = message;
+
+                if (sender === 'AI') {
+                    messageDiv.classList.add('ai-message');
+                } else {
+                    messageDiv.classList.add('user-message');
+                }
+                messageDiv.appendChild(senderDiv);
+                messageDiv.appendChild(textDiv);
+            }
+            
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        messageInput.addEventListener('keydown', () => {
+            if (!isTyping && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'user_typing' }));
+                isTyping = true;
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

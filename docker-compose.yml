@@ -1,0 +1,89 @@
+version: '3'
+
+services:
+  # Vector Database (Qdrant) - Disabled, using local JSON file instead
+  # qdrant:
+  #   image: qdrant/qdrant:latest
+  #   ports:
+  #     - "6333:6333"
+  #     - "6334:6334"
+  #   volumes:
+  #     - ./docker/data/qdrant:/qdrant/storage
+  #   environment:
+  #     - QDRANT_ALLOW_CORS=true
+  #   restart: unless-stopped
+
+  # LLM Service (now using remote endpoint)
+  # llm-service:
+  #   image: ghcr.io/huggingface/text-generation-inference:latest
+  #   ports:
+  #     - "8080:80"
+  #   volumes:
+  #     - ./docker/data/models:/data
+  #   environment:
+  #     - MODEL_ID=TheBloke/Mistral-7B-Instruct-v0.2-GGUF
+  #     - QUANTIZE=q4_k_m
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
+
+  # Embedding Service (now using remote endpoint)
+  # embedding-service:
+  #   image: ghcr.io/huggingface/text-embeddings-inference:latest
+  #   ports:
+  #     - "8081:80"
+  #   volumes:
+  #     - ./docker/data/embeddings:/data
+  #   environment:
+  #     - MODEL_ID=BAAI/bge-small-en-v1.5
+  #   restart: unless-stopped
+
+  # N8N Workflow Automation - Disabled, using local instance
+  # n8n:
+  #   image: n8nio/n8n:latest
+  #   ports:
+  #     - "5678:5678"
+  #   volumes:
+  #     - ./docker/data/n8n:/home/node/.n8n
+  #   environment:
+  #     - N8N_PORT=5678
+  #     - N8N_PROTOCOL=http
+  #     - N8N_HOST=localhost
+  #     - N8N_EDITOR_BASE_URL=http://localhost:5678
+  #     - WEBHOOK_URL=http://localhost:5678/
+  #     - GENERIC_TIMEZONE=UTC
+  #   restart: unless-stopped
+
+  # Webhook API
+  webhook-api:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ./webhook-api:/app
+    ports:
+      - "3000:3000"
+    command: >
+      sh -c "npm install && 
+             node server.js"
+    environment:
+      - PORT=3000
+      - LLM_URL=https://marathon-throws-sheer-pittsburgh.trycloudflare.com/
+      - EMBEDDING_URL=https://marathon-throws-sheer-pittsburgh.trycloudflare.com/
+    restart: unless-stopped
+    depends_on: []
+
+  # PHP Development Server (for local development)
+  php:
+    image: php:8.2-apache
+    ports:
+      - "8889:80"
+    volumes:
+      - .:/var/www/html
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html
+    restart: unless-stopped

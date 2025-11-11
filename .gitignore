@@ -1,0 +1,5 @@
+# Large files
+word_embeddings_project/GoogleNews-vectors-negative300.bin
+
+# Dependencies
+webhook-api/node_modules/
