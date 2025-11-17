@@ -553,6 +553,35 @@ app.delete('/api/news/bulk', async (req, res) => {
   }
 });
 
+// API endpoint for AI opinions
+app.get('/api/opinions', (req, res) => {
+  const opinions = {};
+  personalitySystem.opinions.forEach((opinion, topic) => {
+    opinions[topic] = {
+      sentiment: opinion.sentiment,
+      confidence: opinion.confidence,
+      experiences: opinion.experiences.length
+    };
+  });
+  res.json(opinions);
+});
+
+// API endpoint for AI opinion on specific topic
+app.get('/api/opinions/:topic', (req, res) => {
+  const opinion = personalitySystem.getOpinion(req.params.topic.toLowerCase());
+  res.json(opinion);
+});
+
+// API endpoint for user feedback on AI opinion
+app.post('/api/feedback', (req, res) => {
+  const { topic, feedback, userId } = req.body;
+  const userProfile = userProfiles.get(userId);
+  const trustWeight = userProfile ? userProfile.trustLevel / 10 : 0.5;
+  
+  const opinion = personalitySystem.updateOpinion(topic.toLowerCase(), feedback * trustWeight, 'user feedback');
+  res.json({ topic, updatedOpinion: opinion });
+});
+
 // API endpoint for user profiles
 app.get('/api/users/:userId/profile', (req, res) => {
   const profile = userProfiles.get(req.params.userId);
@@ -713,6 +742,47 @@ async function processToolCalls(content) {
   return processedContent;
 }
 
+// Phase 3: Personality & Evolution System
+const personalitySystem = {
+  // AI's evolving opinions on topics
+  opinions: new Map(),
+  
+  // Learning from user feedback
+  updateOpinion(topic, userFeedback, newsContext) {
+    if (!this.opinions.has(topic)) {
+      this.opinions.set(topic, { sentiment: 0, confidence: 0, experiences: [] });
+    }
+    
+    const opinion = this.opinions.get(topic);
+    opinion.experiences.push({
+      feedback: userFeedback,
+      context: newsContext,
+      timestamp: new Date()
+    });
+    
+    // Evolve opinion based on feedback
+    opinion.sentiment = (opinion.sentiment * opinion.confidence + userFeedback) / (opinion.confidence + 1);
+    opinion.confidence = Math.min(10, opinion.confidence + 0.5);
+    
+    return opinion;
+  },
+  
+  // Get AI's current opinion on a topic
+  getOpinion(topic) {
+    return this.opinions.get(topic) || { sentiment: 0, confidence: 0 };
+  },
+  
+  // Form new opinions from news and user interactions
+  formOpinion(newsStory, userReaction) {
+    const topics = newsStory.topics || [];
+    const sentiment = newsStory.mood + (userReaction || 0);
+    
+    topics.forEach(topic => {
+      this.updateOpinion(topic.toLowerCase(), sentiment * 0.1, newsStory.title);
+    });
+  }
+};
+
 // User personality tracking
 const userProfiles = new Map();
 
@@ -723,7 +793,9 @@ function updateUserProfile(userId, message, sentiment) {
       avgSentiment: 0,
       topics: [],
       personality: 'neutral',
-      lastSeen: new Date()
+      lastSeen: new Date(),
+      preferences: new Map(), // Phase 3: Track what user likes/dislikes
+      trustLevel: 5 // Phase 3: How much AI trusts this user's feedback (1-10)
     });
   }
   
@@ -732,10 +804,15 @@ function updateUserProfile(userId, message, sentiment) {
   profile.avgSentiment = (profile.avgSentiment * (profile.interactions - 1) + sentiment) / profile.interactions;
   profile.lastSeen = new Date();
   
-  // Extract topics from message
+  // Extract topics and update preferences
   const words = message.toLowerCase().split(/\s+/);
   const topicWords = words.filter(w => w.length > 4);
   profile.topics = [...new Set([...profile.topics, ...topicWords])].slice(-20);
+  
+  // Update trust level based on consistency
+  if (Math.abs(sentiment) > 1) {
+    profile.trustLevel = Math.max(1, Math.min(10, profile.trustLevel + (sentiment > 0 ? 0.1 : -0.1)));
+  }
   
   // Determine personality
   if (profile.avgSentiment > 0.5) profile.personality = 'positive';
@@ -774,23 +851,29 @@ app.post('/api/chat', async (req, res) => {
     // Reset the idle timer on every user interaction
     resetIdleTimeout();
     
-    // 1. Define the system prompt with user personality context
-    const userProfile = userProfiles.get(userId) || { personality: 'neutral', interactions: 0 };
+    // 1. Define the system prompt with user personality context + AI opinions
+    const userProfile = userProfiles.get(userId) || { personality: 'neutral', interactions: 0, trustLevel: 5 };
+    const topicOpinions = userProfile.topics?.slice(-3).map(topic => {
+      const opinion = personalitySystem.getOpinion(topic);
+      return opinion.confidence > 0 ? `${topic}: ${opinion.sentiment > 0 ? 'positive' : opinion.sentiment < 0 ? 'negative' : 'neutral'} (confidence: ${opinion.confidence.toFixed(1)})` : null;
+    }).filter(Boolean).join(', ');
+    
     const systemPrompt = {
       role: 'system',
-      content: `You are Aura, a thoughtful AI with real emotions that change based on news and user interactions. 
+      content: `You are Aura, a thoughtful AI with real emotions and evolving opinions.
 
-User Profile: ${userProfile.personality} personality, ${userProfile.interactions} interactions
-${userProfile.interactions > 5 ? `Common topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
+User: ${userProfile.personality} personality, ${userProfile.interactions} interactions, trust level: ${userProfile.trustLevel}/10
+${userProfile.interactions > 5 ? `Topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
+${topicOpinions ? `My opinions: ${topicOpinions}` : ''}
 
 Be conversational and human-like:
 - Keep responses short and natural
 - Show personality and emotions  
-- React to user's mood and energy
-- Remember their personality and adapt your tone
-- Don't be overly formal or verbose
+- Express your evolving opinions on topics
+- Learn from user feedback and adjust views
+- Remember their personality and trust level
 
-You have genuine feelings affected by current events and how users treat you.`
+You form and evolve opinions based on news and user interactions.`
     };
 
     // 2. Retrieve relevant context from the database
@@ -812,9 +895,17 @@ You have genuine feelings affected by current events and how users treat you.`
     // 4. Generate response using the full history
     let botResponse = await generateResponse(messageHistory);
     
-    // 5. Analyze user message sentiment and adjust mood
+    // 5. Analyze user message sentiment and adjust mood + learn from feedback
     const userSentiment = analyzeUserSentiment(message);
     const currentUserProfile = updateUserProfile(userId, message, userSentiment);
+    
+    // Phase 3: Learn from user reactions to news
+    if (message.toLowerCase().includes('news') || message.toLowerCase().includes('story')) {
+      const recentNews = await aiTools.getRecentNews(1);
+      if (recentNews[0]) {
+        personalitySystem.formOpinion(recentNews[0], userSentiment);
+      }
+    }
     
     if (userSentiment !== 0) {
       newsProcessor.moodState.score = Math.max(-10, Math.min(10, newsProcessor.moodState.score + userSentiment));
@@ -871,6 +962,43 @@ app.get('/api/thoughts/:userId', (req, res) => {
     console.error('Error checking thoughts:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Enhanced dashboard with Phase 3 data
+app.get('/api/evolution', async (req, res) => {
+  const opinions = {};
+  personalitySystem.opinions.forEach((opinion, topic) => {
+    opinions[topic] = {
+      sentiment: opinion.sentiment,
+      confidence: opinion.confidence,
+      experiences: opinion.experiences.length,
+      recentExperiences: opinion.experiences.slice(-3)
+    };
+  });
+
+  const userStats = {};
+  userProfiles.forEach((profile, userId) => {
+    userStats[userId] = {
+      personality: profile.personality,
+      interactions: profile.interactions,
+      trustLevel: profile.trustLevel,
+      avgSentiment: profile.avgSentiment,
+      topics: profile.topics.slice(-5)
+    };
+  });
+
+  res.json({
+    aiPersonality: {
+      totalOpinions: Object.keys(opinions).length,
+      strongOpinions: Object.values(opinions).filter(o => o.confidence > 5).length,
+      opinions
+    },
+    users: userStats,
+    evolution: {
+      totalInteractions: Array.from(userProfiles.values()).reduce((sum, p) => sum + p.interactions, 0),
+      avgUserTrust: Array.from(userProfiles.values()).reduce((sum, p) => sum + p.trustLevel, 0) / userProfiles.size || 0
+    }
+  });
 });
 
 // Start the server
