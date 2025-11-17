@@ -72,8 +72,9 @@ services:
              node server.js"
     environment:
       - PORT=3000
-      - LLM_URL=https://marathon-throws-sheer-pittsburgh.trycloudflare.com/
-      - EMBEDDING_URL=https://marathon-throws-sheer-pittsburgh.trycloudflare.com/
+      - LLM_URL=https://automatically-bedford-horse-solutions.trycloudflare.com/
+      - EMBEDDING_URL=https://automatically-bedford-horse-solutions.trycloudflare.com/
+      - QDRANT_URL=http://192.168.5.227:6333
     restart: unless-stopped
     depends_on: []
 

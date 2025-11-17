@@ -14,16 +14,28 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
+const { QdrantClient } = require('@qdrant/js-client-rest');
+const NewsProcessor = require('./news-processor');
 
 // Configuration
 const config = {
   port: process.env.PORT || 3000,
   llmUrl: process.env.LLM_URL || 'http://localhost:8080',
   embeddingUrl: process.env.EMBEDDING_URL || 'http://localhost:8081',
+  qdrantUrl: process.env.QDRANT_URL || 'http://192.168.5.227:6333',
   thoughtsDir: path.join(__dirname, 'thoughts'),
-  dbPath: path.join(__dirname, 'db.json'), // Path for the local JSON database
+  collectionName: 'conversations',
   debug: true
 };
+
+// Initialize QDRANT client
+const qdrant = new QdrantClient({ url: config.qdrantUrl });
+
+// Initialize News Processor
+const newsProcessor = new NewsProcessor(qdrant, config);
+// Inject dependencies
+newsProcessor.generateResponse = generateResponse;
+newsProcessor.generateEmbedding = generateEmbeddings;
 
 // Ensure thoughts directory exists
 if (!fs.existsSync(config.thoughtsDir)) {
@@ -52,14 +64,49 @@ const wss = new WebSocketServer({ server });
 let proactiveInterval = null;
 let idleTimeout = null;
 
-// --- Simulate AI proactive thoughts ---
-const proactiveThoughts = [
-  "What's something you've been curious about lately?",
-  "I was just thinking about the future of renewable energy. It's a fascinating topic.",
-  "Did you know that the octopus has three hearts?",
-  "If you could learn any new skill instantly, what would it be?",
-  "I'm pondering the concept of creativity. What does it mean to you?"
-];
+// --- Dynamic AI proactive thoughts ---
+
+// Generate a proactive thought using LLM
+async function generateProactiveThought(userId = null) {
+  try {
+    // 30% chance to generate news-influenced thought
+    if (Math.random() < 0.3) {
+      const newsThought = await newsProcessor.generateNewsInfluencedThought();
+      if (newsThought) {
+        return newsThought;
+      }
+    }
+
+    let contextPrompt = "Generate a brief, interesting observation or gentle conversation starter. Make it feel like a natural thought you're sharing, not a direct question demanding a response. Examples: 'I was just thinking about...' or 'Something interesting I noticed...'";
+    
+    // If we have a userId, get recent context
+    if (userId) {
+      const recentContext = await retrieveContext(userId, "recent conversation", 2);
+      if (recentContext.length > 0) {
+        const topics = recentContext.map(c => c.userMessage + " " + c.botResponse).join(" ");
+        contextPrompt = `Based on our recent conversation about: "${topics.substring(0, 200)}...", share a gentle follow-up thought or observation. Make it conversational, like you're continuing to think about our discussion, not asking a direct question.`;
+      }
+    }
+
+    const messages = [
+      { role: 'system', content: 'You are Aura. Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions.' },
+      { role: 'user', content: contextPrompt }
+    ];
+
+    const response = await generateResponse(messages);
+    return response || "I've been thinking about how fascinating conversations can be...";
+    
+  } catch (error) {
+    console.error('Error generating proactive thought:', error);
+    // Fallback thoughts - more natural
+    const fallbacks = [
+      "I've been pondering how creativity works in different minds...",
+      "Something interesting about human curiosity just occurred to me...",
+      "I was just reflecting on how much we can learn from simple conversations..."
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  }
+}
 
 function stopProactiveThoughts() {
   if (proactiveInterval) {
@@ -74,8 +121,22 @@ function startProactiveThoughts() {
   if (proactiveInterval) return;
 
   console.log('Proactive thoughts started.');
-  proactiveInterval = setInterval(() => {
-    const thought = proactiveThoughts[Math.floor(Math.random() * proactiveThoughts.length)];
+  proactiveInterval = setInterval(async () => {
+    // Try to get a random recent user for context-aware thoughts
+    let userId = null;
+    try {
+      const collections = await qdrant.scroll(config.collectionName, {
+        limit: 1,
+        with_payload: ['userId']
+      });
+      if (collections.points && collections.points.length > 0) {
+        userId = collections.points[0].payload.userId;
+      }
+    } catch (error) {
+      // Ignore error, will generate generic thought
+    }
+    
+    const thought = await generateProactiveThought(userId);
     console.log(`Broadcasting proactive thought: ${thought}`);
     broadcast({ sender: 'AI', message: thought });
   }, 15000); // Every 15 seconds
@@ -124,26 +185,38 @@ function broadcast(data) {
   });
 }
 
-// --- JSON Database Functions ---
+// --- QDRANT Database Functions ---
 
-// Helper function for Cosine Similarity
-function cosineSimilarity(vecA, vecB) {
-    if (!vecA || !vecB || vecA.length !== vecB.length) {
-        return 0;
+// Initialize collection if it doesn't exist
+async function initializeCollection() {
+  try {
+    const collections = await qdrant.getCollections();
+    const exists = collections.collections.some(c => c.name === config.collectionName);
+    
+    if (!exists) {
+      // First, let's test the embedding to get the actual dimension
+      console.log('Testing embedding API to determine vector dimensions...');
+      const testEmbedding = await generateEmbeddings('test');
+      const vectorSize = testEmbedding ? testEmbedding.length : 1024; // fallback to 1024
+      
+      console.log(`Creating collection with vector size: ${vectorSize}`);
+      await qdrant.createCollection(config.collectionName, {
+        vectors: { size: vectorSize, distance: 'Cosine' }
+      });
+      console.log(`Created collection: ${config.collectionName}`);
     }
-    let dotProduct = 0.0;
-    let normA = 0.0;
-    let normB = 0.0;
-    for (let i = 0; i < vecA.length; i++) {
-        dotProduct += vecA[i] * vecB[i];
-        normA += vecA[i] * vecA[i];
-        normB += vecB[i] * vecB[i];
+  } catch (error) {
+    console.error('Error initializing collection:', error);
+    // Create with default size if embedding test fails
+    try {
+      await qdrant.createCollection(config.collectionName, {
+        vectors: { size: 1024, distance: 'Cosine' }
+      });
+      console.log(`Created collection with default size: ${config.collectionName}`);
+    } catch (fallbackError) {
+      console.error('Failed to create collection with fallback:', fallbackError);
     }
-    const divisor = Math.sqrt(normA) * Math.sqrt(normB);
-    if (divisor === 0) {
-        return 0;
-    }
-    return dotProduct / divisor;
+  }
 }
 
 
@@ -171,68 +244,60 @@ async function generateEmbeddings(text) {
   }
 }
 
-// Store conversation in local JSON file
+// Store conversation in QDRANT
 async function storeConversation(userId, userMessage, botResponse, embedding) {
   try {
-    const timestamp = new Date().toISOString();
-    const pointId = `${userId}_${Date.now()}`;
-    
-    let db = [];
-    if (fs.existsSync(config.dbPath)) {
-        const fileContent = fs.readFileSync(config.dbPath, 'utf8');
-        db = fileContent ? JSON.parse(fileContent) : [];
+    if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+      console.error('Invalid embedding provided to storeConversation');
+      return null;
     }
-
-    db.push({
+    
+    const timestamp = new Date().toISOString();
+    const pointId = Date.now(); // Use timestamp as integer ID
+    
+    console.log(`Storing conversation with embedding size: ${embedding.length}`);
+    
+    await qdrant.upsert(config.collectionName, {
+      points: [{
         id: pointId,
         vector: embedding,
         payload: {
-            userId,
-            userMessage,
-            botResponse,
-            timestamp,
-            type: 'conversation'
+          userId,
+          userMessage,
+          botResponse,
+          timestamp,
+          type: 'conversation'
         }
+      }]
     });
-
-    fs.writeFileSync(config.dbPath, JSON.stringify(db, null, 2));
+    
+    console.log(`Stored conversation for user ${userId}`);
     return pointId;
 
   } catch (error) {
     console.error('Error storing conversation:', error.message);
+    console.error('Full error:', error);
     throw error;
   }
 }
 
-// Retrieve relevant context from local JSON file
-async function retrieveContext(userId, query, limit = 3) { // Limit to 3 recent exchanges
+// Retrieve relevant context from QDRANT
+async function retrieveContext(userId, query, limit = 3) {
   try {
     // Generate embeddings for the query
     const queryEmbedding = await generateEmbeddings(query);
     
-    let db = [];
-    if (fs.existsSync(config.dbPath)) {
-        const fileContent = fs.readFileSync(config.dbPath, 'utf8');
-        db = fileContent ? JSON.parse(fileContent) : [];
-    }
+    // Search for similar conversations
+    const searchResult = await qdrant.search(config.collectionName, {
+      vector: queryEmbedding,
+      filter: {
+        must: [{ key: 'userId', match: { value: userId } }]
+      },
+      limit,
+      with_payload: true
+    });
 
-    if (db.length === 0) {
-        return [];
-    }
-
-    // Filter by userId and calculate similarity
-    const userConversations = db.filter(item => item.payload.userId === userId);
-    
-    const scoredConversations = userConversations.map(item => ({
-        ...item,
-        score: cosineSimilarity(queryEmbedding, item.vector)
-    }));
-
-    // Sort by score and take the top N
-    scoredConversations.sort((a, b) => b.score - a.score);
-    
-    // Return the full payload of the top conversations
-    return scoredConversations.slice(0, limit).map(item => item.payload);
+    return searchResult.map(point => point.payload);
 
   } catch (error) {
     console.error('Error retrieving context:', error.message);
@@ -339,6 +404,54 @@ app.post('/api/trigger-thought', (req, res) => {
 });
 
 
+// API endpoint for manual news processing (POST)
+app.post('/api/process-news', async (req, res) => {
+  try {
+    console.log('Manual news processing triggered');
+    await newsProcessor.processNewsFeeds();
+    res.json({ 
+      success: true, 
+      mood: newsProcessor.moodState,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error processing news:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// API endpoint for manual news processing (GET - for browser access)
+app.get('/api/process-news', async (req, res) => {
+  try {
+    console.log('Manual news processing triggered via GET');
+    await newsProcessor.processNewsFeeds();
+    res.json({ 
+      success: true, 
+      mood: newsProcessor.moodState,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error processing news:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// API endpoint for mood status
+app.get('/api/mood', (req, res) => {
+  try {
+    const mood = {
+      score: newsProcessor.moodState.score,
+      description: newsProcessor.getMoodDescription(),
+      topics: newsProcessor.moodState.topics.slice(0, 10),
+      timestamp: new Date().toISOString()
+    };
+    res.json(mood);
+  } catch (error) {
+    console.error('Error getting mood:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Chat endpoint (existing)
 app.post('/api/chat', async (req, res) => {
   try {
@@ -354,7 +467,7 @@ app.post('/api/chat', async (req, res) => {
     // 1. Define the system prompt
     const systemPrompt = {
       role: 'system',
-      content: 'You are Aura, a thoughtful and proactive AI assistant. You have the ability to think and generate your own thoughts. Keep your responses concise and conversational.'
+      content: 'You are Aura, a thoughtful AI assistant. Respond naturally to the user\'s message. Do not reference or respond to your own proactive thoughts - only respond to what the user actually says. Keep responses conversational and helpful.'
     };
 
     // 2. Retrieve relevant context from the database
@@ -416,6 +529,19 @@ app.get('/api/thoughts/:userId', (req, res) => {
 // Start the server
 server.listen(config.port, async () => {
   console.log(`Webhook API server with WebSocket support running on port ${config.port}`);
+  // Initialize QDRANT collection
+  await initializeCollection();
+  
+  // Process news feeds on startup
+  console.log('Processing initial news feeds...');
+  await newsProcessor.processNewsFeeds();
+  
+  // Set up periodic news processing (every 30 minutes)
+  setInterval(async () => {
+    console.log('Processing news feeds...');
+    await newsProcessor.processNewsFeeds();
+  }, 30 * 60 * 1000);
+  
   // Start proactive thoughts when the server boots up
   startProactiveThoughts();
 });
