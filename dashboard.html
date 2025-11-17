@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHPaibot Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .mood-indicator {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .mood-optimistic { background: #d4edda; color: #155724; }
+        .mood-positive { background: #cce5ff; color: #004085; }
+        .mood-neutral { background: #e2e3e5; color: #383d41; }
+        .mood-concerned { background: #fff3cd; color: #856404; }
+        .mood-troubled { background: #f8d7da; color: #721c24; }
+        .activity-item {
+            padding: 10px;
+            border-left: 3px solid #007bff;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+        }
+        .activity-news { border-left-color: #28a745; }
+        .activity-conversation { border-left-color: #007bff; }
+        .timestamp {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .topic-tag {
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+        .news-item {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+        }
+        .news-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .news-title a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .news-title a:hover {
+            text-decoration: underline;
+        }
+        .news-reaction {
+            font-style: italic;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .mood-score {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .mood-positive { background: #d4edda; color: #155724; }
+        .mood-negative { background: #f8d7da; color: #721c24; }
+        .mood-neutral { background: #e2e3e5; color: #383d41; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>PHPaibot Dashboard</h1>
+            <p>Monitor AI mood, recent activity, and system status</p>
+            <button class="refresh-btn" onclick="loadDashboard()">Refresh</button>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <h3>AI Mood & State</h3>
+                <div id="mood-info">Loading...</div>
+                <div id="topics-info"></div>
+            </div>
+
+            <div class="card">
+                <h3>System Stats</h3>
+                <div id="stats-info">Loading...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Recent News Stories</h3>
+            <div id="news-stories">Loading...</div>
+        </div>
+
+        <div class="card">
+            <h3>Recent Activity</h3>
+            <div id="activity-list">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        async function loadDashboard() {
+            try {
+                const response = await fetch('http://localhost:3000/api/dashboard');
+                const data = await response.json();
+                
+                // Update mood info
+                const moodClass = `mood-${data.mood.description}`;
+                document.getElementById('mood-info').innerHTML = `
+                    <p>Score: <strong>${data.mood.score}</strong></p>
+                    <p>State: <span class="mood-indicator ${moodClass}">${data.mood.description}</span></p>
+                `;
+                
+                // Update topics
+                const topicsHtml = data.mood.topics.map(topic => 
+                    `<span class="topic-tag">${topic}</span>`
+                ).join('');
+                document.getElementById('topics-info').innerHTML = `
+                    <div class="topics">${topicsHtml}</div>
+                `;
+                
+                // Update stats
+                document.getElementById('stats-info').innerHTML = `
+                    <p>Conversations: <strong>${data.stats.totalConversations}</strong></p>
+                    <p>News Items: <strong>${data.stats.totalNews}</strong></p>
+                    <p>Last Update: <span class="timestamp">${new Date(data.stats.lastUpdate).toLocaleString()}</span></p>
+                `;
+                
+                // Update activity list
+                const activityHtml = data.recentActivity.map(item => `
+                    <div class="activity-item activity-${item.type}">
+                        <strong>${item.type === 'news' ? 'News' : 'Chat'}</strong>: ${item.content}
+                        ${item.mood ? `<span class="mood-indicator mood-${item.mood > 0 ? 'positive' : item.mood < 0 ? 'concerned' : 'neutral'}">Mood: ${item.mood}</span>` : ''}
+                        <div class="timestamp">${new Date(item.timestamp).toLocaleString()}</div>
+                    </div>
+                `).join('');
+                
+                document.getElementById('activity-list').innerHTML = activityHtml || '<p>No recent activity</p>';
+
+                // Update news stories
+                const newsHtml = data.newsStories.map(story => `
+                    <div class="news-item">
+                        <div class="news-title">
+                            ${story.url ? `<a href="${story.url}" target="_blank">${story.title}</a>` : story.title}
+                            ${story.mood ? `<span class="mood-score mood-${story.mood > 0 ? 'positive' : story.mood < 0 ? 'negative' : 'neutral'}">${story.mood > 0 ? '+' : ''}${story.mood}</span>` : ''}
+                        </div>
+                        ${story.reaction ? `<div class="news-reaction">"${story.reaction}"</div>` : ''}
+                        ${story.topics ? `<div class="topics">${story.topics.map(topic => `<span class="topic-tag">${topic}</span>`).join('')}</div>` : ''}
+                        <div class="timestamp">${new Date(story.timestamp).toLocaleString()}</div>
+                    </div>
+                `).join('');
+                
+                document.getElementById('news-stories').innerHTML = newsHtml || '<p>No recent news stories</p>';
+                
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                document.getElementById('mood-info').innerHTML = '<p style="color: red;">Error loading data</p>';
+            }
+        }
+
+        // Load dashboard on page load
+        loadDashboard();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>

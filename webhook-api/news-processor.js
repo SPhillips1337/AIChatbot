@@ -29,20 +29,56 @@ class NewsProcessor {
   }
 
   async processFeed(feedUrl) {
-    // Use SearxNG to parse RSS
-    const searxUrl = `http://192.168.5.227:4040/search?q=site:${feedUrl}&format=json&engines=rss`;
-    
     try {
-      const response = await axios.get(searxUrl, { timeout: 10000 });
-      const results = response.data.results || [];
+      // Direct RSS fetch and parse
+      const response = await axios.get(feedUrl, { timeout: 10000 });
+      const xmlData = response.data;
       
-      for (const item of results.slice(0, 5)) { // Process top 5 items
-        await this.analyzeNewsItem(item);
+      // Extract items using regex
+      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/g;
+      let match;
+      let itemCount = 0;
+      
+      while ((match = itemRegex.exec(xmlData)) !== null && itemCount < 5) {
+        const itemXml = match[1];
+        
+        const title = this.extractXmlContent(itemXml, 'title');
+        const description = this.extractXmlContent(itemXml, 'description');
+        const link = this.extractXmlContent(itemXml, 'link');
+        
+        if (title && title.length > 5 && 
+            !title.includes('hosting location') && 
+            !title.includes('Wolfram|Alpha') &&
+            !title.includes('bbci.co.uk') &&
+            !title.toLowerCase().includes('hosting')) {
+          const item = {
+            title: title,
+            content: description || '',
+            url: link
+          };
+          
+          console.log(`Processing news: ${title.substring(0, 50)}...`);
+          await this.analyzeNewsItem(item);
+          itemCount++;
+        }
       }
     } catch (error) {
-      console.error('SearxNG RSS parsing failed, trying direct fetch');
-      // Fallback: direct RSS parsing would go here
+      console.error('RSS parsing failed:', error.message);
     }
+  }
+
+  extractXmlContent(xml, tagName) {
+    // Handle CDATA and regular content
+    const cdataRegex = new RegExp(`<${tagName}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tagName}>`, 'i');
+    const regularRegex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i');
+    
+    let match = xml.match(cdataRegex);
+    if (match) return match[1].trim();
+    
+    match = xml.match(regularRegex);
+    if (match) return match[1].replace(/<[^>]*>/g, '').trim();
+    
+    return null;
   }
 
   async analyzeNewsItem(item) {
@@ -50,15 +86,29 @@ class NewsProcessor {
       const prompt = `Analyze this news headline and brief: "${item.title} - ${item.content || ''}"
       
       Rate the emotional impact from -5 (very negative) to +5 (very positive) and identify key topics.
-      Respond in JSON format: {"mood": number, "topics": ["topic1", "topic2"], "reaction": "brief emotional reaction"}`;
+      Respond ONLY with valid JSON: {"mood": -2, "topics": ["topic1", "topic2"], "reaction": "brief reaction"}`;
 
       const messages = [
-        { role: 'system', content: 'You are an AI analyzing news for emotional impact. Be balanced and not extreme.' },
+        { role: 'system', content: 'You are an AI analyzing news for emotional impact. Respond only with valid JSON. Be balanced and not extreme.' },
         { role: 'user', content: prompt }
       ];
 
       const response = await this.generateResponse(messages);
-      const analysis = JSON.parse(response);
+      
+      // Clean and parse JSON response
+      let cleanResponse = response.replace(/```json|```/g, '').trim();
+      if (!cleanResponse.startsWith('{')) {
+        // Extract JSON from response if wrapped in text
+        const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+        cleanResponse = jsonMatch ? jsonMatch[0] : '{"mood": 0, "topics": ["General"], "reaction": "Unable to analyze"}';
+      }
+      
+      const analysis = JSON.parse(cleanResponse);
+      
+      // Validate analysis structure
+      if (typeof analysis.mood !== 'number') analysis.mood = 0;
+      if (!Array.isArray(analysis.topics)) analysis.topics = ['General'];
+      if (typeof analysis.reaction !== 'string') analysis.reaction = 'No reaction available';
       
       // Update mood state
       this.moodState.score = Math.max(-10, Math.min(10, this.moodState.score + (analysis.mood * 0.1)));
@@ -69,6 +119,9 @@ class NewsProcessor {
       
     } catch (error) {
       console.error('Error analyzing news item:', error.message);
+      // Store with default analysis if parsing fails
+      const defaultAnalysis = { mood: 0, topics: ['General'], reaction: 'Analysis failed' };
+      await this.storeNewsContext(item, defaultAnalysis);
     }
   }
 
@@ -141,6 +194,13 @@ class NewsProcessor {
     try {
       if (fs.existsSync(this.newsPath)) {
         this.moodState = JSON.parse(fs.readFileSync(this.newsPath, 'utf8'));
+        // Clean up unwanted topics
+        this.moodState.topics = this.moodState.topics.filter(topic => 
+          !topic.includes('Wolfram') && 
+          !topic.includes('hosting') && 
+          !topic.includes('Location') &&
+          !topic.includes('Amsterdam')
+        );
       }
     } catch (error) {
       console.error('Error loading mood state:', error.message);

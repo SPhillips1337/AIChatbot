@@ -10,9 +10,42 @@
             background-color: #f4f7f9;
             margin: 0;
             display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .menu-bar {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .menu-bar h1 {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        .menu-links {
+            display: flex;
+            gap: 15px;
+        }
+        .menu-links a {
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .menu-links a:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .chat-wrapper {
+            flex: 1;
+            display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            padding: 20px;
         }
         #chat-container {
             width: 100%;
@@ -116,7 +149,17 @@
 </head>
 <body>
 
-<div id="chat-container">
+    <div class="menu-bar">
+        <h1>PHPaibot - AI Chat</h1>
+        <div class="menu-links">
+            <a href="dashboard.html" target="_blank">📊 Dashboard</a>
+            <a href="#" onclick="checkMood()">😊 Mood</a>
+            <a href="#" onclick="processNews()">📰 News</a>
+        </div>
+    </div>
+
+    <div class="chat-wrapper">
+        <div id="chat-container">
     <div id="status">Connecting...</div>
     <div id="chat-box"></div>
     <div id="input-area">
@@ -248,6 +291,27 @@
             }
         });
     });
+
+    // Menu functions
+    async function checkMood() {
+        try {
+            const response = await fetch('http://localhost:3000/api/mood');
+            const mood = await response.json();
+            alert(`AI Mood: ${mood.description} (${mood.score})\nTopics: ${mood.topics.slice(0, 5).join(', ')}`);
+        } catch (error) {
+            alert('Error checking mood: ' + error.message);
+        }
+    }
+
+    async function processNews() {
+        try {
+            const response = await fetch('http://localhost:3000/api/process-news', { method: 'POST' });
+            const result = await response.json();
+            alert(`News processed! New mood: ${result.mood.score}`);
+        } catch (error) {
+            alert('Error processing news: ' + error.message);
+        }
+    }
 </script>
 
 </body>

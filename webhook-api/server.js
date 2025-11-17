@@ -404,6 +404,60 @@ app.post('/api/trigger-thought', (req, res) => {
 });
 
 
+// API endpoint for recent thoughts/activity
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    // Get recent activity from QDRANT
+    const recentActivity = await qdrant.scroll(config.collectionName, {
+      limit,
+      with_payload: true
+    });
+
+    // Filter and format news stories
+    const newsStories = (recentActivity.points || [])
+      .filter(p => p.payload.type === 'news')
+      .sort((a, b) => new Date(b.payload.timestamp) - new Date(a.payload.timestamp))
+      .map(point => ({
+        title: point.payload.title,
+        url: point.payload.url,
+        mood: point.payload.mood,
+        topics: point.payload.topics,
+        reaction: point.payload.reaction,
+        timestamp: point.payload.timestamp
+      }))
+      .slice(0, 10);
+
+    const dashboard = {
+      mood: {
+        score: newsProcessor.moodState.score,
+        description: newsProcessor.getMoodDescription(),
+        topics: newsProcessor.moodState.topics.slice(0, 10)
+      },
+      newsStories,
+      recentActivity: (recentActivity.points || []).map(point => ({
+        type: point.payload.type || 'conversation',
+        timestamp: point.payload.timestamp,
+        content: point.payload.type === 'news' ? 
+          point.payload.title : 
+          `${point.payload.userMessage?.substring(0, 50) || 'Chat'}...`,
+        mood: point.payload.mood || null
+      })),
+      stats: {
+        totalConversations: (recentActivity.points || []).filter(p => p.payload.type === 'conversation').length,
+        totalNews: (recentActivity.points || []).filter(p => p.payload.type === 'news').length,
+        lastUpdate: new Date().toISOString()
+      }
+    };
+
+    res.json(dashboard);
+  } catch (error) {
+    console.error('Error getting dashboard data:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // API endpoint for manual news processing (POST)
 app.post('/api/process-news', async (req, res) => {
   try {
