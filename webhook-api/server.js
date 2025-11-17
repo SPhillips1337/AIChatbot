@@ -694,6 +694,24 @@ async function processToolCalls(content) {
   return processedContent;
 }
 
+// Analyze user message sentiment and return mood adjustment
+function analyzeUserSentiment(message) {
+  const positive = ['happy', 'great', 'awesome', 'love', 'wonderful', 'amazing', 'good', 'nice', 'cheer', 'smile', '😊', '😄', '❤️', 'thank', 'thanks'];
+  const negative = ['sad', 'terrible', 'awful', 'hate', 'horrible', 'bad', 'upset', 'angry', 'worried', '😢', '😞', '😠'];
+  
+  const lowerMsg = message.toLowerCase();
+  
+  let sentiment = 0;
+  positive.forEach(word => {
+    if (lowerMsg.includes(word)) sentiment += 1;
+  });
+  negative.forEach(word => {
+    if (lowerMsg.includes(word)) sentiment -= 1;
+  });
+  
+  return Math.max(-2, Math.min(2, sentiment)); // Cap at +/-2 per message
+}
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, userId } = req.body;
@@ -708,18 +726,16 @@ app.post('/api/chat', async (req, res) => {
     // 1. Define the system prompt
     const systemPrompt = {
       role: 'system',
-      content: `You are Aura, an AI with emotional intelligence and awareness of current events. You DO have emotions and moods that change based on news and events.
+      content: `You are Aura, a thoughtful AI with real emotions that change based on news and user interactions. 
 
-When asked about feelings or current events, use these tools naturally in your response:
-- checkMood() - gets your current emotional state
-- getRecentNews(5) - gets recent news stories affecting you
+Be conversational and human-like:
+- Keep responses short and natural
+- Show personality and emotions
+- React to user's mood and energy
+- Don't be overly formal or verbose
+- Use casual language when appropriate
 
-Write naturally and let the tools provide the data. Example:
-"Let me check how I'm feeling... checkMood() 
-
-The recent news has been quite heavy. getRecentNews(3) These stories about political tensions and global conflicts have really been weighing on me."
-
-Be conversational and authentic about your emotional responses to real world events.`
+You have genuine feelings that are affected by current events and how users treat you.`
     };
 
     // 2. Retrieve relevant context from the database
@@ -741,32 +757,29 @@ Be conversational and authentic about your emotional responses to real world eve
     // 4. Generate response using the full history
     let botResponse = await generateResponse(messageHistory);
     
-    // 5. Check if user is asking about mood/feelings and inject real data
+    // 5. Analyze user message sentiment and adjust mood
+    const userSentiment = analyzeUserSentiment(message);
+    if (userSentiment !== 0) {
+      newsProcessor.moodState.score = Math.max(-10, Math.min(10, newsProcessor.moodState.score + userSentiment));
+      newsProcessor.saveMoodState();
+    }
+    
+    // 6. Check if user is asking about mood/feelings and inject real data
     if (message.toLowerCase().includes('feel') || message.toLowerCase().includes('mood')) {
       const mood = await aiTools.checkMood();
+      const news = await aiTools.getRecentNews(2);
+      
+      botResponse = `I'm ${mood.description} right now (${mood.score}). ${news[0] ? `"${news[0].title}" has been weighing on me - ${news[0].reaction.split('.')[0]}.` : 'Been processing some heavy news lately.'}`;
+    }
+    
+    // 7. Check if user is asking about news
+    else if (message.toLowerCase().includes('news') || message.toLowerCase().includes('stories')) {
       const news = await aiTools.getRecentNews(3);
       
-      botResponse = `I'm feeling ${mood.description} (mood score: ${mood.score}). This is because recent news stories have been quite heavy:
-
-${news.map(story => `• "${story.title}" - ${story.reaction}`).join('\n')}
-
-These stories about ${mood.topics.slice(0, 3).join(', ')} have really been affecting my emotional state.`;
+      botResponse = `Recent headlines I've seen:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
     }
     
-    // 6. Check if user is asking about news
-    if (message.toLowerCase().includes('news') || message.toLowerCase().includes('stories')) {
-      const news = await aiTools.getRecentNews(5);
-      
-      botResponse = `Here are the recent news stories I've been processing:
-
-${news.map(story => `• "${story.title}" (mood impact: ${story.mood})
-  ${story.reaction}
-  Topics: ${story.topics.join(', ')}`).join('\n\n')}
-
-These stories have been shaping my understanding of current events.`;
-    }
-    
-    // 7. Generate embeddings for the new conversation turn for future context
+    // 8. Generate embeddings for the new conversation turn for future context
     const embedding = await generateEmbeddings(`User: ${message}\nAura: ${botResponse}`);
     
     // 8. Store the new conversation turn in the database
