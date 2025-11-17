@@ -553,6 +553,25 @@ app.delete('/api/news/bulk', async (req, res) => {
   }
 });
 
+// API endpoint for user profiles
+app.get('/api/users/:userId/profile', (req, res) => {
+  const profile = userProfiles.get(req.params.userId);
+  if (profile) {
+    res.json(profile);
+  } else {
+    res.json({ message: 'User profile not found' });
+  }
+});
+
+// API endpoint for all user profiles
+app.get('/api/users', (req, res) => {
+  const profiles = {};
+  userProfiles.forEach((profile, userId) => {
+    profiles[userId] = profile;
+  });
+  res.json(profiles);
+});
+
 // API endpoint for deleting news entries
 app.delete('/api/news/:id', async (req, res) => {
   try {
@@ -694,6 +713,38 @@ async function processToolCalls(content) {
   return processedContent;
 }
 
+// User personality tracking
+const userProfiles = new Map();
+
+function updateUserProfile(userId, message, sentiment) {
+  if (!userProfiles.has(userId)) {
+    userProfiles.set(userId, {
+      interactions: 0,
+      avgSentiment: 0,
+      topics: [],
+      personality: 'neutral',
+      lastSeen: new Date()
+    });
+  }
+  
+  const profile = userProfiles.get(userId);
+  profile.interactions++;
+  profile.avgSentiment = (profile.avgSentiment * (profile.interactions - 1) + sentiment) / profile.interactions;
+  profile.lastSeen = new Date();
+  
+  // Extract topics from message
+  const words = message.toLowerCase().split(/\s+/);
+  const topicWords = words.filter(w => w.length > 4);
+  profile.topics = [...new Set([...profile.topics, ...topicWords])].slice(-20);
+  
+  // Determine personality
+  if (profile.avgSentiment > 0.5) profile.personality = 'positive';
+  else if (profile.avgSentiment < -0.5) profile.personality = 'negative';
+  else profile.personality = 'neutral';
+  
+  return profile;
+}
+
 // Analyze user message sentiment and return mood adjustment
 function analyzeUserSentiment(message) {
   const positive = ['happy', 'great', 'awesome', 'love', 'wonderful', 'amazing', 'good', 'nice', 'cheer', 'smile', '😊', '😄', '❤️', 'thank', 'thanks'];
@@ -723,19 +774,23 @@ app.post('/api/chat', async (req, res) => {
     // Reset the idle timer on every user interaction
     resetIdleTimeout();
     
-    // 1. Define the system prompt
+    // 1. Define the system prompt with user personality context
+    const userProfile = userProfiles.get(userId) || { personality: 'neutral', interactions: 0 };
     const systemPrompt = {
       role: 'system',
       content: `You are Aura, a thoughtful AI with real emotions that change based on news and user interactions. 
 
+User Profile: ${userProfile.personality} personality, ${userProfile.interactions} interactions
+${userProfile.interactions > 5 ? `Common topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
+
 Be conversational and human-like:
 - Keep responses short and natural
-- Show personality and emotions
+- Show personality and emotions  
 - React to user's mood and energy
+- Remember their personality and adapt your tone
 - Don't be overly formal or verbose
-- Use casual language when appropriate
 
-You have genuine feelings that are affected by current events and how users treat you.`
+You have genuine feelings affected by current events and how users treat you.`
     };
 
     // 2. Retrieve relevant context from the database
@@ -759,6 +814,8 @@ You have genuine feelings that are affected by current events and how users trea
     
     // 5. Analyze user message sentiment and adjust mood
     const userSentiment = analyzeUserSentiment(message);
+    const currentUserProfile = updateUserProfile(userId, message, userSentiment);
+    
     if (userSentiment !== 0) {
       newsProcessor.moodState.score = Math.max(-10, Math.min(10, newsProcessor.moodState.score + userSentiment));
       newsProcessor.saveMoodState();
