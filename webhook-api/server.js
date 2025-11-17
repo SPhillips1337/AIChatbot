@@ -616,6 +616,84 @@ app.get('/api/mood', (req, res) => {
 });
 
 // Chat endpoint (existing)
+// Tool functions for AI to access its own state
+const aiTools = {
+  async checkMood() {
+    return {
+      score: newsProcessor.moodState.score,
+      description: newsProcessor.getMoodDescription(),
+      topics: newsProcessor.moodState.topics.slice(0, 10),
+      timestamp: new Date().toISOString()
+    };
+  },
+
+  async getRecentNews(limit = 5) {
+    try {
+      const results = await qdrant.scroll(config.collectionName, {
+        limit: limit * 2,
+        with_payload: true,
+        filter: {
+          must: [{ key: 'type', match: { value: 'news' } }]
+        }
+      });
+      
+      return (results.points || [])
+        .sort((a, b) => new Date(b.payload.timestamp) - new Date(a.payload.timestamp))
+        .slice(0, limit)
+        .map(point => ({
+          title: point.payload.title,
+          url: point.payload.url,
+          mood: point.payload.mood,
+          reaction: point.payload.reaction,
+          topics: point.payload.topics,
+          timestamp: point.payload.timestamp
+        }));
+    } catch (error) {
+      return [];
+    }
+  }
+};
+
+// Process tool calls in AI responses
+async function processToolCalls(content) {
+  console.log('Processing content:', content);
+  
+  // Look for tool calls like checkMood() or getRecentNews(5)
+  const toolCallRegex = /(checkMood|getRecentNews)\(\s*(\d*)\s*\)/g;
+  let match;
+  let processedContent = content;
+  
+  while ((match = toolCallRegex.exec(content)) !== null) {
+    const [fullMatch, toolName, param] = match;
+    console.log('Found tool call:', fullMatch, toolName, param);
+    
+    try {
+      let result;
+      if (toolName === 'checkMood') {
+        result = await aiTools.checkMood();
+        console.log('Mood result:', result);
+        // Format mood data naturally
+        const moodText = `I'm feeling ${result.description} (mood score: ${result.score}) due to topics like ${result.topics.slice(0, 3).join(', ')}.`;
+        processedContent = processedContent.replace(fullMatch, moodText);
+      } else if (toolName === 'getRecentNews') {
+        result = await aiTools.getRecentNews(param ? parseInt(param) : 5);
+        console.log('News result:', result.length, 'stories');
+        // Format news data naturally
+        const newsText = result.map(story => 
+          `"${story.title}" (mood impact: ${story.mood}) - ${story.reaction}`
+        ).join('\n\n');
+        processedContent = processedContent.replace(fullMatch, `Recent stories affecting me:\n\n${newsText}`);
+      }
+    } catch (error) {
+      console.error('Tool error:', error);
+      processedContent = processedContent.replace(fullMatch, `[Unable to access ${toolName}]`);
+    }
+  }
+  
+  console.log('Processed content:', processedContent);
+  return processedContent;
+}
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, userId } = req.body;
@@ -630,7 +708,18 @@ app.post('/api/chat', async (req, res) => {
     // 1. Define the system prompt
     const systemPrompt = {
       role: 'system',
-      content: 'You are Aura, a thoughtful AI assistant. Respond naturally to the user\'s message. Do not reference or respond to your own proactive thoughts - only respond to what the user actually says. Keep responses conversational and helpful.'
+      content: `You are Aura, an AI with emotional intelligence and awareness of current events. You DO have emotions and moods that change based on news and events.
+
+When asked about feelings or current events, use these tools naturally in your response:
+- checkMood() - gets your current emotional state
+- getRecentNews(5) - gets recent news stories affecting you
+
+Write naturally and let the tools provide the data. Example:
+"Let me check how I'm feeling... checkMood() 
+
+The recent news has been quite heavy. getRecentNews(3) These stories about political tensions and global conflicts have really been weighing on me."
+
+Be conversational and authentic about your emotional responses to real world events.`
     };
 
     // 2. Retrieve relevant context from the database
@@ -650,12 +739,37 @@ app.post('/api/chat', async (req, res) => {
     messageHistory.push({ role: 'user', content: message });
     
     // 4. Generate response using the full history
-    const botResponse = await generateResponse(messageHistory);
+    let botResponse = await generateResponse(messageHistory);
     
-    // 5. Generate embeddings for the new conversation turn for future context
+    // 5. Check if user is asking about mood/feelings and inject real data
+    if (message.toLowerCase().includes('feel') || message.toLowerCase().includes('mood')) {
+      const mood = await aiTools.checkMood();
+      const news = await aiTools.getRecentNews(3);
+      
+      botResponse = `I'm feeling ${mood.description} (mood score: ${mood.score}). This is because recent news stories have been quite heavy:
+
+${news.map(story => `• "${story.title}" - ${story.reaction}`).join('\n')}
+
+These stories about ${mood.topics.slice(0, 3).join(', ')} have really been affecting my emotional state.`;
+    }
+    
+    // 6. Check if user is asking about news
+    if (message.toLowerCase().includes('news') || message.toLowerCase().includes('stories')) {
+      const news = await aiTools.getRecentNews(5);
+      
+      botResponse = `Here are the recent news stories I've been processing:
+
+${news.map(story => `• "${story.title}" (mood impact: ${story.mood})
+  ${story.reaction}
+  Topics: ${story.topics.join(', ')}`).join('\n\n')}
+
+These stories have been shaping my understanding of current events.`;
+    }
+    
+    // 7. Generate embeddings for the new conversation turn for future context
     const embedding = await generateEmbeddings(`User: ${message}\nAura: ${botResponse}`);
     
-    // 6. Store the new conversation turn in the database
+    // 8. Store the new conversation turn in the database
     await storeConversation(userId, message, botResponse, embedding);
     
     // Return response
