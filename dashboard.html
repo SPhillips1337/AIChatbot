@@ -111,6 +111,19 @@
         .mood-positive { background: #d4edda; color: #155724; }
         .mood-negative { background: #f8d7da; color: #721c24; }
         .mood-neutral { background: #e2e3e5; color: #383d41; }
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            float: right;
+        }
+        .delete-btn:hover {
+            background: #c82333;
+        }
     </style>
 </head>
 <body>
@@ -136,6 +149,7 @@
 
         <div class="card">
             <h3>Recent News Stories</h3>
+            <button class="refresh-btn" onclick="bulkDeleteWolfram()" style="float: right; background: #dc3545;">Clean Wolfram</button>
             <div id="news-stories">Loading...</div>
         </div>
 
@@ -186,10 +200,11 @@
 
                 // Update news stories
                 const newsHtml = data.newsStories.map(story => `
-                    <div class="news-item">
+                    <div class="news-item" id="news-${story.id}">
                         <div class="news-title">
                             ${story.url ? `<a href="${story.url}" target="_blank">${story.title}</a>` : story.title}
                             ${story.mood ? `<span class="mood-score mood-${story.mood > 0 ? 'positive' : story.mood < 0 ? 'negative' : 'neutral'}">${story.mood > 0 ? '+' : ''}${story.mood}</span>` : ''}
+                            <button class="delete-btn" onclick="deleteNews(${story.id})">×</button>
                         </div>
                         ${story.reaction ? `<div class="news-reaction">"${story.reaction}"</div>` : ''}
                         ${story.topics ? `<div class="topics">${story.topics.map(topic => `<span class="topic-tag">${topic}</span>`).join('')}</div>` : ''}
@@ -210,6 +225,51 @@
         
         // Auto-refresh every 30 seconds
         setInterval(loadDashboard, 30000);
+
+        // Delete news function
+        async function deleteNews(newsId) {
+            if (!confirm('Delete this news entry?')) return;
+            
+            try {
+                const response = await fetch(`http://localhost:3000/api/news/${newsId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    document.getElementById(`news-${newsId}`).remove();
+                    console.log(`Deleted news entry ${newsId}`);
+                } else {
+                    alert('Failed to delete news entry');
+                }
+            } catch (error) {
+                console.error('Error deleting news:', error);
+                alert('Error deleting news entry');
+            }
+        }
+
+        // Bulk delete Wolfram Alpha entries
+        async function bulkDeleteWolfram() {
+            if (!confirm('Delete all Wolfram Alpha entries? This cannot be undone.')) return;
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/news/bulk', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filter: 'Wolfram' })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`Deleted ${result.deleted} Wolfram Alpha entries`);
+                    loadDashboard(); // Refresh
+                } else {
+                    alert('Failed to bulk delete entries');
+                }
+            } catch (error) {
+                console.error('Error bulk deleting:', error);
+                alert('Error bulk deleting entries');
+            }
+        }
     </script>
 </body>
 </html>

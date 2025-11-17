@@ -110,47 +110,107 @@ async function generateProactiveThought(userId = null) {
 
 function stopProactiveThoughts() {
   if (proactiveInterval) {
-    clearInterval(proactiveInterval);
+    clearTimeout(proactiveInterval);
     proactiveInterval = null;
     console.log('Proactive thoughts stopped.');
   }
 }
 
+// Conversation state tracking
+let conversationState = {
+  lastMessage: null,
+  waitingForResponse: false,
+  checkInSent: false
+};
+
 function startProactiveThoughts() {
-  // Ensure we don't start multiple intervals
   if (proactiveInterval) return;
 
   console.log('Proactive thoughts started.');
-  proactiveInterval = setInterval(async () => {
-    // Try to get a random recent user for context-aware thoughts
-    let userId = null;
-    try {
-      const collections = await qdrant.scroll(config.collectionName, {
-        limit: 1,
-        with_payload: ['userId']
-      });
-      if (collections.points && collections.points.length > 0) {
-        userId = collections.points[0].payload.userId;
-      }
-    } catch (error) {
-      // Ignore error, will generate generic thought
+  
+  // Send initial thought
+  sendInitialThought();
+  
+  // Set up check-in after 5 minutes of no response
+  proactiveInterval = setTimeout(() => {
+    if (conversationState.waitingForResponse && !conversationState.checkInSent) {
+      sendCheckIn();
     }
-    
-    const thought = await generateProactiveThought(userId);
-    console.log(`Broadcasting proactive thought: ${thought}`);
-    broadcast({ sender: 'AI', message: thought });
-  }, 15000); // Every 15 seconds
+  }, 300000); // 5 minutes
+}
+
+async function sendInitialThought() {
+  if (conversationState.waitingForResponse) return;
+  
+  const thought = await generateProactiveThought();
+  console.log(`Broadcasting initial thought: ${thought}`);
+  
+  // Broadcast to all connected clients
+  wss.clients.forEach(client => {
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify({
+        type: 'proactive_message',
+        message: thought,
+        timestamp: new Date().toISOString()
+      }));
+    }
+  });
+  
+  conversationState.waitingForResponse = true;
+  conversationState.lastMessage = Date.now();
+}
+
+function sendCheckIn() {
+  console.log('Sending check-in message');
+  
+  const checkInMessage = "Are you still there? No worries if you're busy - I'll wait quietly until you're ready to chat.";
+  
+  wss.clients.forEach(client => {
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify({
+        type: 'proactive_message',
+        message: checkInMessage,
+        timestamp: new Date().toISOString()
+      }));
+    }
+  });
+  
+  conversationState.checkInSent = true;
+  
+  // Wait another 2 minutes, then go quiet
+  setTimeout(() => {
+    if (conversationState.waitingForResponse) {
+      console.log('Going quiet - user appears to be away');
+      const quietMessage = "I'll wait here quietly. Just say hello when you're ready to chat again! 😊";
+      
+      wss.clients.forEach(client => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'proactive_message',
+            message: quietMessage,
+            timestamp: new Date().toISOString()
+          }));
+        }
+      });
+      
+      stopProactiveThoughts();
+    }
+  }, 120000); // 2 minutes
 }
 
 function resetIdleTimeout() {
+  // Reset conversation state - user is active
+  conversationState.waitingForResponse = false;
+  conversationState.checkInSent = false;
+  
   stopProactiveThoughts();
   if (idleTimeout) {
     clearTimeout(idleTimeout);
   }
   idleTimeout = setTimeout(() => {
-    console.log('User idle for 2 minutes, resuming proactive thoughts.');
+    console.log('User idle for 10 minutes, starting gentle proactive engagement.');
     startProactiveThoughts();
-  }, 120000); // 2 minutes
+  }, 600000); // 10 minutes
 }
 
 
@@ -174,7 +234,7 @@ wss.on('connection', (ws) => {
     console.log('Client disconnected');
   });
 
-  ws.send(JSON.stringify({ sender: 'AI', message: 'Hello! I am Aura. I can now send you proactive messages.' }));
+  ws.send(JSON.stringify({ sender: 'AI', message: 'Hello! I\'m Aura. Feel free to start a conversation whenever you\'re ready.' }));
 });
 
 function broadcast(data) {
@@ -420,6 +480,7 @@ app.get('/api/dashboard', async (req, res) => {
       .filter(p => p.payload.type === 'news')
       .sort((a, b) => new Date(b.payload.timestamp) - new Date(a.payload.timestamp))
       .map(point => ({
+        id: point.id,
         title: point.payload.title,
         url: point.payload.url,
         mood: point.payload.mood,
@@ -455,6 +516,54 @@ app.get('/api/dashboard', async (req, res) => {
   } catch (error) {
     console.error('Error getting dashboard data:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// API endpoint for bulk deleting news entries by filter
+app.delete('/api/news/bulk', async (req, res) => {
+  try {
+    const { filter } = req.body;
+    
+    // Get all points matching filter
+    const results = await qdrant.scroll(config.collectionName, {
+      limit: 1000,
+      with_payload: true,
+      filter: {
+        must: [
+          { key: 'type', match: { value: 'news' } }
+        ]
+      }
+    });
+    
+    // Find points to delete based on title filter
+    const pointsToDelete = results.points
+      .filter(p => p.payload.title && p.payload.title.includes(filter))
+      .map(p => p.id);
+    
+    if (pointsToDelete.length > 0) {
+      await qdrant.delete(config.collectionName, {
+        points: pointsToDelete
+      });
+    }
+    
+    res.json({ success: true, deleted: pointsToDelete.length, ids: pointsToDelete });
+  } catch (error) {
+    console.error('Error bulk deleting news entries:', error);
+    res.status(500).json({ error: 'Failed to bulk delete entries' });
+  }
+});
+
+// API endpoint for deleting news entries
+app.delete('/api/news/:id', async (req, res) => {
+  try {
+    const pointId = parseInt(req.params.id);
+    await qdrant.delete(config.collectionName, {
+      points: [pointId]
+    });
+    res.json({ success: true, deleted: pointId });
+  } catch (error) {
+    console.error('Error deleting news entry:', error);
+    res.status(500).json({ error: 'Failed to delete entry' });
   }
 });
 
