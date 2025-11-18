@@ -46,7 +46,7 @@
           {"name": "Node.js webhook API", "status": "Implemented"},
           {"name": "PHP Web server", "status": "Implemented"}
         ],
-        "status": "Production Ready"
+        "status": "Partially Provisioned - requires external services"
       }
     }
   },
@@ -123,5 +123,21 @@
     "Develop feedback mechanisms for continuous learning",
     "Add more diverse news sources and content types"
   ],
+  "statusDetails": {
+    "externalServices": {
+      "qdrant": "Specify QDRANT_URL (e.g. http://host:6333) - required",
+      "llm": "Specify LLM_URL (OpenAI-compatible) - required",
+      "embeddings": "Specify EMBEDDING_URL (OpenAI-compatible) - required",
+      "searxng": "Optional - URL for RSS parsing if used"
+    },
+    "requiredEnv": [
+      "LLM_URL",
+      "EMBEDDING_URL",
+      "QDRANT_URL",
+      "PORT (optional)",
+      "DEBUG flags as needed"
+    ],
+    "notes": "This project expects external services for LLM, embeddings, and vector DB. Ensure these are reachable and properly configured before running the webhook API."
+  },
   "lastUpdated": "2025-11-17T12:30:00Z"
 }

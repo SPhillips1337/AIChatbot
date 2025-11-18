@@ -18,9 +18,9 @@ PHPaibot uses a sophisticated architecture with external data integration:
 
 - **PHP Frontend Server**: An Apache server running in Docker to serve the `index.html` file.
 - **Node.js Backend**: The core of the application, handling chat logic, memory, WebSocket communication, and news processing.
-- **QDRANT Vector Database**: Provides semantic search and context storage at `http://192.168.5.227:6333/`
-- **Remote Ollama Endpoint**: Provides LLM and embedding models. (External dependency)
-- **News Integration**: Uses SearxNG at `http://192.168.5.227:4040/` for RSS parsing
+- **QDRANT Vector Database**: Provides semantic search and context storage. The `docker-compose.yml` in this repo comments out the Qdrant service by default; configure `QDRANT_URL` to point to your Qdrant instance if you run it remotely.
+- **LLM & Embeddings**: Expects OpenAI-compatible endpoints (configure `LLM_URL` and `EMBEDDING_URL`). The server calls `v1/chat/completions` and `v1/embeddings` paths — compatible gateways include Ollama, OpenRouter, or other OpenAI-style APIs.
+- **News Integration**: Optional RSS parsing for news; you can use SearxNG or let the server fetch RSS directly (see `webhook-api/news-processor.js`).
 - **Docker Compose**: Manages the local services.
 
 ## Features
@@ -47,10 +47,11 @@ PHPaibot uses a sophisticated architecture with external data integration:
 
 ### Prerequisites
 
-- Docker and Docker Compose
-- A running remote Ollama (or other OpenAI-compatible) endpoint
-- QDRANT server at `http://192.168.5.227:6333/`
-- SearxNG server at `http://192.168.5.227:4040/`
+- Docker and Docker Compose (note: modern Docker supports the `docker compose` plugin; either `docker compose` or `docker-compose` may work depending on your installation)
+- A running OpenAI-compatible LLM endpoint (set `LLM_URL`)
+- An embeddings endpoint (set `EMBEDDING_URL`)
+- A QDRANT server reachable at the `QDRANT_URL` you configure (the included `docker-compose.yml` has Qdrant commented out by default)
+- (Optional) SearxNG or another RSS parser if you want to use an external RSS parsing service
 
 ### Installation
 
