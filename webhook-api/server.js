@@ -154,6 +154,7 @@ async function sendInitialThought() {
   wss.clients.forEach(client => {
     if (client.readyState === client.OPEN) {
       client.send(JSON.stringify({
+        sender: 'AI',
         type: 'proactive_message',
         message: thought,
         timestamp: new Date().toISOString()
@@ -173,6 +174,7 @@ function sendCheckIn() {
   wss.clients.forEach(client => {
     if (client.readyState === client.OPEN) {
       client.send(JSON.stringify({
+        sender: 'AI',
         type: 'proactive_message',
         message: checkInMessage,
         timestamp: new Date().toISOString()
@@ -191,6 +193,7 @@ function sendCheckIn() {
       wss.clients.forEach(client => {
         if (client.readyState === client.OPEN) {
           client.send(JSON.stringify({
+            sender: 'AI',
             type: 'proactive_message',
             message: quietMessage,
             timestamp: new Date().toISOString()
@@ -225,9 +228,9 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-      // Check for a specific signal from the client
-      if (data.type === 'user_typing') {
-        // console.log('User is typing, resetting idle timer.');
+      // Check for activity signals from the client
+      if (data.type === 'user_typing' || data.type === 'user_activity') {
+        // console.log('User activity detected, resetting idle timer.');
         resetIdleTimeout();
       }
     } catch (e) {

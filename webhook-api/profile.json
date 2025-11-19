@@ -85,5 +85,36 @@
     "preferences": {},
     "trustLevel": 5,
     "updated_at": "2025-11-19T12:15:16.214Z"
+  },
+  "user_1763558551859": {
+    "interactions": 2,
+    "avgSentiment": 0,
+    "topics": [
+      "seem,",
+      "sometimes",
+      "between",
+      "lines",
+      "picture",
+      "honestly",
+      "following",
+      "late,",
+      "other",
+      "crypto",
+      "related",
+      "news,",
+      "trump",
+      "lanning",
+      "every",
+      "citizen",
+      "about",
+      "think",
+      "story",
+      "isreal"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-19T13:58:30.515Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "updated_at": "2025-11-19T13:58:30.515Z"
   }
 }
