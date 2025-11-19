@@ -43,6 +43,7 @@ PHPaibot uses a sophisticated architecture with external data integration:
 - **Feedback Loops (In Progress)**: `/api/feedback` lets conversations update the personality system; the dashboard visualizes evolving state.
 - **Opinion Formation (In Progress)**: `/api/opinions` exposes Aura’s topic-level opinions derived from news mood + feedback signals.
 - **Structured Fact Memory (In Progress)**: Conversations extract long-lived facts (name, favorites, attributes) so Aura can remember and reuse them naturally.
+- **Persistent Identity (Implemented)**: The chat UI prompts for a display name and stores a device-bound user ID so Aura recognizes you between sessions.
 - **Admin / Dev Controls (Implemented)**: `/api/admin/dev-mock`, `/api/admin/reset-mood`, `/api/admin/clear-news`, and the `/admin` dashboard make tuning and testing easier.
 - **Unified UI Origin (Implemented)**: The webhook API now serves `/chat` so the SPA and API share origin and avoid manual query overrides.
 
@@ -143,3 +144,4 @@ PHPaibot/
 - **Real-time Updates**: WebSocket-based proactive message delivery
 - **News Awareness**: Current events influence conversation topics
 - **Scalable Architecture**: QDRANT vector database for production-ready memory
+- **Persistent Identity**: LocalStorage-backed IDs + name prompt keep the same persona across sessions on a device

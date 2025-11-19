@@ -145,12 +145,78 @@
             color: #666;
             text-align: center;
         }
+        #user-greeting {
+            font-size: 0.9em;
+            margin-left: 12px;
+            opacity: 0.85;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        .modal-overlay.hidden {
+            display: none;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 420px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+            text-align: center;
+        }
+        .modal-content h2 {
+            margin-top: 0;
+        }
+        .modal-content input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #d0d0d0;
+            font-size: 1em;
+            margin: 15px 0;
+        }
+        .modal-content button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: #007bff;
+            color: #fff;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        @keyframes input-shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            50% { transform: translateX(4px); }
+            75% { transform: translateX(-4px); }
+            100% { transform: translateX(0); }
+        }
+        .shake {
+            animation: input-shake 0.3s;
+        }
     </style>
 </head>
 <body>
 
     <div class="menu-bar">
-        <h1>PHPaibot - AI Chat</h1>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <h1 style="margin:0;">PHPaibot - AI Chat</h1>
+            <span id="user-greeting"></span>
+        </div>
         <div class="menu-links">
             <a id="dashboardLink" href="#" target="_blank">📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
@@ -160,15 +226,34 @@
 
     <div class="chat-wrapper">
         <div id="chat-container">
-    <div id="status">Connecting...</div>
-    <div id="chat-box"></div>
-    <div id="input-area">
-        <input type="text" id="message-input" placeholder="Type a message...">
-        <button id="send-button" title="Send">&#10148;</button>
+            <div id="status">Loading...</div>
+            <div id="chat-box"></div>
+            <div id="input-area">
+                <input type="text" id="message-input" placeholder="Type a message...">
+                <button id="send-button" title="Send">&#10148;</button>
+            </div>
+        </div>
     </div>
-</div>
+
+    <div id="identity-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Welcome!</h2>
+            <p>What should Aura call you?</p>
+            <input type="text" id="display-name-input" placeholder="Enter your name" autocomplete="name">
+            <button id="save-identity">Start chatting</button>
+            <small style="display:block;margin-top:10px;color:#666;">We'll remember this on this device so Aura can greet you properly.</small>
+        </div>
+    </div>
 
     <script>
+        const STORAGE_KEYS = {
+            userId: 'phpaibot_user_id',
+            displayName: 'phpaibot_display_name'
+        };
+
+        let userId = null;
+        let displayName = null;
+
         // Determine API base. If opened via file:// or hostname is empty, default to localhost:4002
         const detectedBase = (window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : ''));
         let API_BASE = detectedBase;
@@ -181,186 +266,250 @@
             API_BASE = override;
         }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const chatBox = document.getElementById('chat-box');
-        const messageInput = document.getElementById('message-input');
-        const sendButton = document.getElementById('send-button');
-        const statusDiv = document.getElementById('status');
-        const userId = 'user_' + Date.now(); // Simple unique ID for the user session
-        let isTyping = false;
-
-        // Ensure the dashboard link points to the webhook API admin route
-        try {
+        document.addEventListener('DOMContentLoaded', async () => {
+            const chatBox = document.getElementById('chat-box');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            const statusDiv = document.getElementById('status');
             const dashboardLink = document.getElementById('dashboardLink');
-            if (dashboardLink) dashboardLink.href = API_BASE + '/admin';
-        } catch (e) {
-            console.error('Could not set dashboard link:', e);
-        }
+            let ws = null;
+            let isTyping = false;
 
-        // --- WebSocket for Server-Pushed Messages ---
-        // Derive WebSocket URL from API_BASE (ws for http, wss for https)
-        const wsBase = API_BASE.replace(/^http/, 'ws');
-        const ws = new WebSocket(wsBase);
-        const ACTIVITY_THROTTLE_MS = 15000;
-        let lastActivityPing = 0;
-
-        function notifyUserActivity(force = false, reason = 'activity') {
-            if (ws.readyState !== WebSocket.OPEN) return;
-            const now = Date.now();
-            if (!force && (now - lastActivityPing) < ACTIVITY_THROTTLE_MS) return;
-            ws.send(JSON.stringify({ type: 'user_activity', reason }));
-            lastActivityPing = now;
-        }
-
-        ws.onopen = () => {
-            console.log('WebSocket connection established');
-            statusDiv.textContent = 'Connected';
-            statusDiv.style.color = '#28a745';
-            notifyUserActivity(true, 'connected');
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'proactive_message' && data.message) {
-                    addMessage('AI', data.message);
-                    return;
-                }
-                if (data.sender && data.message) {
-                    addMessage(data.sender, data.message);
-                }
-            } catch (error) {
-                console.error('Error parsing WebSocket message:', error);
+            if (dashboardLink) {
+                dashboardLink.href = API_BASE + '/admin';
             }
-        };
 
-        ws.onclose = () => {
-            console.log('WebSocket connection closed');
-            statusDiv.textContent = 'Disconnected. Please refresh.';
-            statusDiv.style.color = '#dc3545';
-        };
+            await ensureIdentity();
+            updateGreeting(displayName);
 
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            statusDiv.textContent = 'Connection Error';
-            statusDiv.style.color = '#dc3545';
-        };
+            function initializeWebSocket() {
+                statusDiv.textContent = 'Connecting...';
+                statusDiv.style.color = '#666';
+                const wsBase = API_BASE.replace(/^http/, 'ws');
+                ws = new WebSocket(wsBase);
+                const ACTIVITY_THROTTLE_MS = 15000;
+                let lastActivityPing = 0;
 
-        // --- Fetch for User-Sent Messages ---
-        async function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message) return;
+                function notifyUserActivity(force = false, reason = 'activity') {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    const now = Date.now();
+                    if (!force && (now - lastActivityPing) < ACTIVITY_THROTTLE_MS) return;
+                    ws.send(JSON.stringify({ type: 'user_activity', reason }));
+                    lastActivityPing = now;
+                }
 
-            addMessage('You', message);
-            messageInput.value = '';
-            isTyping = false; // Reset typing flag after sending
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/chat`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        userId: userId,
-                    }),
+                ws.onopen = () => {
+                    statusDiv.textContent = 'Connected';
+                    statusDiv.style.color = '#28a745';
+                    notifyUserActivity(true, 'connected');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'proactive_message' && data.message) {
+                            addMessage('AI', data.message);
+                            return;
+                        }
+                        if (data.sender && data.message) {
+                            addMessage(data.sender, data.message);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+
+                ws.onclose = () => {
+                    statusDiv.textContent = 'Disconnected. Please refresh.';
+                    statusDiv.style.color = '#dc3545';
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    statusDiv.textContent = 'Connection Error';
+                    statusDiv.style.color = '#dc3545';
+                };
+
+                // Activity listeners
+                messageInput.addEventListener('keydown', () => {
+                    if (ws.readyState === WebSocket.OPEN && !isTyping) {
+                        ws.send(JSON.stringify({ type: 'user_typing' }));
+                        isTyping = true;
+                    }
+                    notifyUserActivity(true, 'input_keydown');
                 });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                if (data.message) {
-                    addMessage('AI', data.message);
-                }
-
-            } catch (error) {
-                console.error('Error sending message:', error);
-                addMessage('Error', `Sorry, there was an error processing your request. (${error.message})`);
+                messageInput.addEventListener('focus', () => notifyUserActivity(true, 'input_focus'));
+                chatBox.addEventListener('scroll', () => notifyUserActivity(false, 'scroll'));
+                window.addEventListener('focus', () => notifyUserActivity(true, 'window_focus'));
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) notifyUserActivity(true, 'visibility');
+                });
+                ['mousemove', 'click', 'touchstart'].forEach(eventName => {
+                    document.addEventListener(eventName, () => notifyUserActivity(false, eventName), { passive: true });
+                });
             }
-        }
 
-        function addMessage(sender, message) {
-            const messageDiv = document.createElement('div');
-            
-            if (sender === 'Error') {
-                messageDiv.classList.add('error-message');
-                messageDiv.textContent = message;
-            } else {
-                const senderDiv = document.createElement('div');
-                const textDiv = document.createElement('div');
+            initializeWebSocket();
 
-                messageDiv.classList.add('message');
-                senderDiv.classList.add('sender');
-                textDiv.classList.add('text');
+            async function sendMessage() {
+                const message = messageInput.value.trim();
+                if (!message) return;
 
-                senderDiv.textContent = sender;
-                textDiv.textContent = message;
+                addMessage(displayName || 'You', message);
+                messageInput.value = '';
+                isTyping = false;
+                
+                try {
+                    const response = await fetch(`${API_BASE}/api/chat`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            userId: userId,
+                            displayName: displayName
+                        }),
+                    });
 
-                if (sender === 'AI') {
-                    messageDiv.classList.add('ai-message');
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    if (data.message) {
+                        addMessage('AI', data.message);
+                    }
+
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    addMessage('Error', `Sorry, there was an error processing your request. (${error.message})`);
+                }
+            }
+
+            function addMessage(sender, message) {
+                const messageDiv = document.createElement('div');
+                
+                if (sender === 'Error') {
+                    messageDiv.classList.add('error-message');
+                    messageDiv.textContent = message;
                 } else {
-                    messageDiv.classList.add('user-message');
+                    const senderDiv = document.createElement('div');
+                    const textDiv = document.createElement('div');
+
+                    messageDiv.classList.add('message');
+                    senderDiv.classList.add('sender');
+                    textDiv.classList.add('text');
+
+                    senderDiv.textContent = sender;
+                    textDiv.textContent = message;
+
+                    if (sender === 'AI') {
+                        messageDiv.classList.add('ai-message');
+                    } else {
+                        messageDiv.classList.add('user-message');
+                    }
+                    messageDiv.appendChild(senderDiv);
+                    messageDiv.appendChild(textDiv);
                 }
-                messageDiv.appendChild(senderDiv);
-                messageDiv.appendChild(textDiv);
+                
+                chatBox.appendChild(messageDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
             }
+
+            sendButton.addEventListener('click', sendMessage);
             
-            chatBox.appendChild(messageDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
+            messageInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
 
-        sendButton.addEventListener('click', sendMessage);
-        
-        messageInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
-                sendMessage();
+        // Menu functions
+        async function checkMood() {
+            try {
+                const response = await fetch(`${API_BASE}/api/mood`);
+                const mood = await response.json();
+                alert(`AI Mood: ${mood.description} (${mood.score})\nTopics: ${mood.topics.slice(0, 5).join(', ')}`);
+            } catch (error) {
+                alert('Error checking mood: ' + error.message);
             }
-        });
+        }
 
-        messageInput.addEventListener('keydown', () => {
-            if (!isTyping && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'user_typing' }));
-                isTyping = true;
+        async function processNews() {
+            try {
+                const response = await fetch(`${API_BASE}/api/process-news`, { method: 'POST' });
+                const result = await response.json();
+                alert(`News processed! New mood: ${result.mood.score}`);
+            } catch (error) {
+                alert('Error processing news: ' + error.message);
             }
-            notifyUserActivity(true, 'input_keydown');
-        });
-
-        messageInput.addEventListener('focus', () => notifyUserActivity(true, 'input_focus'));
-        chatBox.addEventListener('scroll', () => notifyUserActivity(false, 'scroll'));
-        window.addEventListener('focus', () => notifyUserActivity(true, 'window_focus'));
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) notifyUserActivity(true, 'visibility');
-        });
-        ['mousemove', 'click', 'touchstart'].forEach(eventName => {
-            document.addEventListener(eventName, () => notifyUserActivity(false, eventName), { passive: true });
-        });
-    });
-
-    // Menu functions
-    async function checkMood() {
-        try {
-            const response = await fetch(`${API_BASE}/api/mood`);
-            const mood = await response.json();
-            alert(`AI Mood: ${mood.description} (${mood.score})\nTopics: ${mood.topics.slice(0, 5).join(', ')}`);
-        } catch (error) {
-            alert('Error checking mood: ' + error.message);
         }
-    }
 
-    async function processNews() {
-        try {
-            const response = await fetch(`${API_BASE}/api/process-news`, { method: 'POST' });
-            const result = await response.json();
-            alert(`News processed! New mood: ${result.mood.score}`);
-        } catch (error) {
-            alert('Error processing news: ' + error.message);
+        function updateGreeting(name) {
+            const greetingEl = document.getElementById('user-greeting');
+            if (!greetingEl) return;
+            greetingEl.textContent = name ? `👤 ${name}` : '👤 Guest';
         }
-    }
-</script>
+
+        function generateUserId() {
+            if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+            return `user_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        }
+
+        function ensureIdentity() {
+            userId = localStorage.getItem(STORAGE_KEYS.userId);
+            if (!userId) {
+                userId = generateUserId();
+                localStorage.setItem(STORAGE_KEYS.userId, userId);
+            }
+
+            displayName = localStorage.getItem(STORAGE_KEYS.displayName);
+            if (displayName) {
+                updateGreeting(displayName);
+                return Promise.resolve();
+            }
+
+            return new Promise(resolve => {
+                const modal = document.getElementById('identity-modal');
+                const nameInput = document.getElementById('display-name-input');
+                const saveBtn = document.getElementById('save-identity');
+                modal.classList.remove('hidden');
+                setTimeout(() => nameInput.focus(), 100);
+
+                const saveHandler = () => {
+                    const value = nameInput.value.trim();
+                    if (!value) {
+                        nameInput.classList.add('shake');
+                        setTimeout(() => nameInput.classList.remove('shake'), 400);
+                        return;
+                    }
+                    displayName = value;
+                    localStorage.setItem(STORAGE_KEYS.displayName, displayName);
+                    modal.classList.add('hidden');
+                    updateGreeting(displayName);
+                    cleanup();
+                    resolve();
+                };
+
+                const keyHandler = (event) => {
+                    if (event.key === 'Enter') {
+                        saveHandler();
+                    }
+                };
+
+                const cleanup = () => {
+                    saveBtn.removeEventListener('click', saveHandler);
+                    nameInput.removeEventListener('keypress', keyHandler);
+                };
+
+                saveBtn.addEventListener('click', saveHandler);
+                nameInput.addEventListener('keypress', keyHandler);
+            });
+        }
+    </script>
 
 </body>
 </html>

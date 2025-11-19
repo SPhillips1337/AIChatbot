@@ -11,7 +11,7 @@ Create a proactive PHP chatbot that simulates human-like thinking by:
 
 The proof-of-concept has matured into a production-style hybrid push/pull chat system with persistent memory and Phase‑3 personality features.
 
-- **Frontend (HTML/JS)**: A single-page chat interface served directly from the webhook API at `/chat`. It uses WebSockets for proactive thoughts and HTTP (Fetch) for user messages so UI and API share the same origin.
+- **Frontend (HTML/JS)**: A single-page chat interface served directly from the webhook API at `/chat`. It prompts users for a display name, stores a device-bound ID in `localStorage`, and uses WebSockets for proactive thoughts plus HTTP (Fetch) for user messages so UI and API share the same origin.
 - **Backend (Node.js)**: The Express.js webhook API (`webhook-api/server.js`) manages chat logic, proactive engagement timers, admin APIs, the dashboard data feed, and WebSocket push delivery.
 - **Remote AI Models**: The server calls OpenAI-compatible endpoints for `/v1/chat/completions` and `/v1/embeddings` (e.g., Ollama, OpenRouter). A `DEV_MOCK` flag or `/api/admin/dev-mock` toggles canned responses for local testing.
 - **Memory (Qdrant Vector DB)**: Conversations, news context, and thoughts are stored in Qdrant (`@qdrant/js-client-rest`). Embeddings come from the remote endpoint; dev-mock returns deterministic vectors for development.
@@ -40,12 +40,13 @@ The proof-of-concept has matured into a production-style hybrid push/pull chat s
 ### Phase 3: Personality & Evolution
 - **Goal**: Create a chatbot that adapts over time and develops a unique personality.
 - **Status Snapshot**:
-    - Profile store (`profileStore.js` + `/api/users`) persists sentiment, trust, topics, and structured facts. **Implemented**
+    - Profile store (`profileStore.js` + `/api/users`) persists sentiment, trust, topics, and structured facts tied to stable device/user IDs. **Implemented**
     - Personality system tracks evolving opinions exposed via `/api/opinions` and updated by `/api/feedback`. **In Progress**
     - Thought generation consults profiles + news (see `updateUserProfile` + `newsProcessor.generateNewsInfluencedThought`). **In Progress**
     - Admin/dashboard endpoints (`/api/dashboard`, `/api/admin/*`, `/admin`) provide operational visibility and controls. **Implemented**
     - Unified UI origin (`/chat` served by the webhook API). **Implemented**
     - Structured fact memory extraction (name, favorites, attributes) feeds prompts and direct answers. **In Progress**
+    - Lightweight identity prompt + device-bound IDs ensure the same persona persists across sessions. **Implemented**
 
 ## Next Steps
 - Short-term:
@@ -56,6 +57,7 @@ The proof-of-concept has matured into a production-style hybrid push/pull chat s
     - Expand structured fact extraction patterns (relationships, projects, multi-user preferences) and add confirmation prompts for low-confidence data.
     - Implement long-term relationship memory and opinion consolidation from news + user interactions.
     - Add automated tests and monitoring for news processing and persistence.
+    - Layer proper authentication or multi-user account management on top of the current lightweight identity flow.
 
 Notes:
 - You can toggle dev-mock at runtime via `POST /api/admin/dev-mock` (JSON `{ "enabled": true|false }`).

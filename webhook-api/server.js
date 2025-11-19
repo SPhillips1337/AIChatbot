@@ -885,6 +885,12 @@ const FACT_PATTERNS = [
 
 function ensureProfileShape(profile = {}) {
   if (!profile.facts) profile.facts = {};
+  if (!profile.preferences) profile.preferences = {};
+  if (!Array.isArray(profile.topics)) profile.topics = [];
+  if (typeof profile.trustLevel !== 'number') profile.trustLevel = 5;
+  if (typeof profile.interactions !== 'number') profile.interactions = 0;
+  if (typeof profile.avgSentiment !== 'number') profile.avgSentiment = 0;
+  if (!profile.personality) profile.personality = 'neutral';
   return profile;
 }
 
@@ -1004,25 +1010,53 @@ function resolveFactQuestion(lowerMessage, profile) {
   return null;
 }
 
+function createNewProfile() {
+  return {
+    interactions: 0,
+    avgSentiment: 0,
+    topics: [],
+    personality: 'neutral',
+    lastSeen: new Date().toISOString(),
+    preferences: {},
+    trustLevel: 5,
+    facts: {}
+  };
+}
+
+function getOrCreateProfile(userId) {
+  let profile = userProfiles.get(userId);
+  if (!profile) {
+    profile = profileStore.getProfile(userId) || createNewProfile();
+    profile = ensureProfileShape(profile);
+    userProfiles.set(userId, profile);
+  } else {
+    profile = ensureProfileShape(profile);
+  }
+  return profile;
+}
+
+function applyDisplayNameToProfile(profile, name) {
+  if (!profile || !name) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  profile.displayName = trimmed;
+  profile.facts = profile.facts || {};
+  const existing = profile.facts.name;
+  if (!existing || existing.value?.toLowerCase() !== trimmed.toLowerCase() || (existing.confidence || 0) < 0.95) {
+    profile.facts.name = {
+      value: trimmed,
+      label: 'name',
+      confidence: 0.99,
+      source: 'user_display_name',
+      updatedAt: new Date().toISOString()
+    };
+  }
+}
+
 async function updateUserProfile(userId, message, sentiment) {
   try {
     // Load from in-memory cache or persistent store
-    let profile = userProfiles.get(userId) || profileStore.getProfile(userId);
-
-    if (!profile) {
-      profile = {
-        interactions: 0,
-        avgSentiment: 0,
-        topics: [],
-        personality: 'neutral',
-        lastSeen: new Date().toISOString(),
-        preferences: {}, // Phase 3: Track what user likes/dislikes
-        trustLevel: 5, // Phase 3: How much AI trusts this user's feedback (1-10)
-        facts: {}
-      };
-    }
-
-    profile = ensureProfileShape(profile);
+    let profile = getOrCreateProfile(userId);
 
     profile.interactions = (profile.interactions || 0) + 1;
     profile.avgSentiment = ((profile.avgSentiment || 0) * (profile.interactions - 1) + sentiment) / profile.interactions;
@@ -1076,7 +1110,7 @@ function analyzeUserSentiment(message) {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, userId } = req.body;
+    const { message, userId, displayName } = req.body;
     
     if (!message || !userId) {
       return res.status(400).json({ error: 'Message and userId are required' });
@@ -1087,7 +1121,10 @@ app.post('/api/chat', async (req, res) => {
     resetIdleTimeout();
     
     // 1. Define the system prompt with user personality context + AI opinions
-    const userProfile = ensureProfileShape(userProfiles.get(userId) || { personality: 'neutral', interactions: 0, trustLevel: 5 });
+    const userProfile = getOrCreateProfile(userId);
+    if (displayName) {
+      applyDisplayNameToProfile(userProfile, displayName);
+    }
     const topicOpinions = userProfile.topics?.slice(-3).map(topic => {
       const opinion = personalitySystem.getOpinion(topic);
       return opinion.confidence > 0 ? `${topic}: ${opinion.sentiment > 0 ? 'positive' : opinion.sentiment < 0 ? 'negative' : 'neutral'} (confidence: ${opinion.confidence.toFixed(1)})` : null;
