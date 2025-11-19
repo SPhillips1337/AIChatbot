@@ -6,6 +6,8 @@
  * It also includes a WebSocket server for push-based communication.
  */
 
+// Load .env if available (safe try - optional dependency)
+try { require('dotenv').config(); } catch (e) { /* dotenv not installed - skip */ }
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -27,6 +29,9 @@ const config = {
   collectionName: 'conversations',
   debug: true
 };
+
+let devMock = process.env.DEV_MOCK === 'true';
+console.log('DEV_MOCK:', devMock);
 
 // Initialize QDRANT client
 const qdrant = new QdrantClient({ url: config.qdrantUrl });
@@ -283,7 +288,13 @@ async function initializeCollection() {
 // Generate embeddings for text
 async function generateEmbeddings(text) {
   try {
-    const apiUrl = `${config.embeddingUrl}v1/embeddings`;
+    // Dev mock mode returns a stable dummy vector for local testing
+    if (devMock) {
+      const size = 1024;
+      return new Array(size).fill(0.01);
+    }
+
+    const apiUrl = `${config.embeddingUrl.replace(/\/$/, '')}/v1/embeddings`;
     const requestBody = {
       model: "bge-m3:latest",
       input: text
@@ -368,8 +379,20 @@ async function retrieveContext(userId, query, limit = 3) {
 // Generate response from LLM
 async function generateResponse(messages) {
   try {
+    // Development mock mode: return a canned, friendly reply for local testing
+    if (devMock) {
+      let lastUser = null;
+      if (Array.isArray(messages)) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'user') { lastUser = messages[i].content; break; }
+        }
+      }
+      const heard = lastUser ? lastUser.substring(0, 200) : 'Hello';
+      return `Mock reply: I heard "${heard}" — this is a local dev response.`;
+    }
+
     // The URL from environment now points to the base of the OpenAI-compatible API
-    const apiUrl = `${config.llmUrl}v1/chat/completions`;
+    const apiUrl = `${config.llmUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
     const requestBody = {
       model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
@@ -573,9 +596,9 @@ app.get('/api/opinions/:topic', (req, res) => {
 });
 
 // API endpoint for user feedback on AI opinion
-app.post('/api/feedback', (req, res) => {
+app.post('/api/feedback', async (req, res) => {
   const { topic, feedback, userId } = req.body;
-  const userProfile = userProfiles.get(userId);
+  const userProfile = (await profileStore.getProfile(userId)) || userProfiles.get(userId);
   const trustWeight = userProfile ? userProfile.trustLevel / 10 : 0.5;
   
   const opinion = personalitySystem.updateOpinion(topic.toLowerCase(), feedback * trustWeight, 'user feedback');
@@ -583,21 +606,18 @@ app.post('/api/feedback', (req, res) => {
 });
 
 // API endpoint for user profiles
-app.get('/api/users/:userId/profile', (req, res) => {
-  const profile = userProfiles.get(req.params.userId);
+app.get('/api/users/:userId/profile', async (req, res) => {
+  const profile = await profileStore.getProfile(req.params.userId);
   if (profile) {
     res.json(profile);
   } else {
-    res.json({ message: 'User profile not found' });
+    res.status(404).json({ message: 'User profile not found' });
   }
 });
 
 // API endpoint for all user profiles
-app.get('/api/users', (req, res) => {
-  const profiles = {};
-  userProfiles.forEach((profile, userId) => {
-    profiles[userId] = profile;
-  });
+app.get('/api/users', async (req, res) => {
+  const profiles = await profileStore.listProfiles();
   res.json(profiles);
 });
 
@@ -644,6 +664,71 @@ app.get('/api/process-news', async (req, res) => {
   } catch (error) {
     console.error('Error processing news:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Admin endpoint to reset mood
+app.post('/api/admin/reset-mood', async (req, res) => {
+  try {
+    newsProcessor.moodState = { score: 0, topics: [] };
+    newsProcessor.saveMoodState();
+    try {
+      fs.writeFileSync(newsProcessor.newsPath, JSON.stringify(newsProcessor.moodState, null, 2));
+    } catch (e) {
+      console.error('Error clearing news-data.json:', e.message);
+      try {
+        const os = require('os');
+        const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
+        fs.writeFileSync(fallbackPath, JSON.stringify(newsProcessor.moodState, null, 2));
+        newsProcessor.newsPath = fallbackPath;
+        console.log('Wrote cleared mood to fallback path:', fallbackPath);
+      } catch (err2) {
+        console.error('Failed to write cleared mood to fallback path:', err2.message);
+      }
+    }
+    res.json({ success: true, mood: newsProcessor.moodState });
+  } catch (err) {
+    console.error('Error resetting mood:', err);
+    res.status(500).json({ error: 'Failed to reset mood' });
+  }
+});
+
+// Admin endpoint to clear news entries (deletes news points from Qdrant and resets mood file)
+app.post('/api/admin/clear-news', async (req, res) => {
+  try {
+    const limit = parseInt(req.body.limit) || 1000;
+    const results = await qdrant.scroll(config.collectionName, {
+      limit,
+      with_payload: true,
+      filter: { must: [{ key: 'type', match: { value: 'news' } }] }
+    });
+
+    const ids = (results.points || []).map(p => p.id);
+    if (ids.length > 0) {
+      await qdrant.delete(config.collectionName, { points: ids });
+    }
+
+    // Reset in-memory moodState and persist
+    newsProcessor.moodState = { score: 0, topics: [] };
+    try {
+      fs.writeFileSync(newsProcessor.newsPath, JSON.stringify(newsProcessor.moodState, null, 2));
+    } catch (e) {
+      console.error('Error clearing news-data.json:', e.message);
+      try {
+        const os = require('os');
+        const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
+        fs.writeFileSync(fallbackPath, JSON.stringify(newsProcessor.moodState, null, 2));
+        newsProcessor.newsPath = fallbackPath;
+        console.log('Wrote cleared mood to fallback path:', fallbackPath);
+      } catch (err2) {
+        console.error('Failed to write cleared mood to fallback path:', err2.message);
+      }
+    }
+
+    res.json({ success: true, deleted: ids.length });
+  } catch (err) {
+    console.error('Error clearing news:', err);
+    res.status(500).json({ error: 'Failed to clear news' });
   }
 });
 
@@ -784,42 +869,58 @@ const personalitySystem = {
 };
 
 // User personality tracking
+const profileStore = require('./profileStore');
 const userProfiles = new Map();
 
-function updateUserProfile(userId, message, sentiment) {
-  if (!userProfiles.has(userId)) {
-    userProfiles.set(userId, {
-      interactions: 0,
-      avgSentiment: 0,
-      topics: [],
-      personality: 'neutral',
-      lastSeen: new Date(),
-      preferences: new Map(), // Phase 3: Track what user likes/dislikes
-      trustLevel: 5 // Phase 3: How much AI trusts this user's feedback (1-10)
-    });
+async function updateUserProfile(userId, message, sentiment) {
+  try {
+    // Load from in-memory cache or persistent store
+    let profile = userProfiles.get(userId) || profileStore.getProfile(userId);
+
+    if (!profile) {
+      profile = {
+        interactions: 0,
+        avgSentiment: 0,
+        topics: [],
+        personality: 'neutral',
+        lastSeen: new Date().toISOString(),
+        preferences: {}, // Phase 3: Track what user likes/dislikes
+        trustLevel: 5 // Phase 3: How much AI trusts this user's feedback (1-10)
+};
+
+let devMock = process.env.DEV_MOCK === 'true';
+console.log('DEV_MOCK:', devMock);
+
+    }
+
+    profile.interactions = (profile.interactions || 0) + 1;
+    profile.avgSentiment = ((profile.avgSentiment || 0) * (profile.interactions - 1) + sentiment) / profile.interactions;
+    profile.lastSeen = new Date().toISOString();
+
+    // Extract topics and update preferences
+    const words = message.toLowerCase().split(/\s+/);
+    const topicWords = words.filter(w => w.length > 4);
+    profile.topics = [...new Set([...(profile.topics || []), ...topicWords])].slice(-20);
+
+    // Update trust level based on consistency
+    if (Math.abs(sentiment) > 1) {
+      profile.trustLevel = Math.max(1, Math.min(10, (profile.trustLevel || 5) + (sentiment > 0 ? 0.1 : -0.1)));
+    }
+
+    // Determine personality
+    if ((profile.avgSentiment || 0) > 0.5) profile.personality = 'positive';
+    else if ((profile.avgSentiment || 0) < -0.5) profile.personality = 'negative';
+    else profile.personality = 'neutral';
+
+    // Update in-memory cache and persist
+    userProfiles.set(userId, profile);
+    profileStore.saveProfile(userId, profile);
+
+    return profile;
+  } catch (err) {
+    console.error('updateUserProfile error:', err);
+    throw err;
   }
-  
-  const profile = userProfiles.get(userId);
-  profile.interactions++;
-  profile.avgSentiment = (profile.avgSentiment * (profile.interactions - 1) + sentiment) / profile.interactions;
-  profile.lastSeen = new Date();
-  
-  // Extract topics and update preferences
-  const words = message.toLowerCase().split(/\s+/);
-  const topicWords = words.filter(w => w.length > 4);
-  profile.topics = [...new Set([...profile.topics, ...topicWords])].slice(-20);
-  
-  // Update trust level based on consistency
-  if (Math.abs(sentiment) > 1) {
-    profile.trustLevel = Math.max(1, Math.min(10, profile.trustLevel + (sentiment > 0 ? 0.1 : -0.1)));
-  }
-  
-  // Determine personality
-  if (profile.avgSentiment > 0.5) profile.personality = 'positive';
-  else if (profile.avgSentiment < -0.5) profile.personality = 'negative';
-  else profile.personality = 'neutral';
-  
-  return profile;
 }
 
 // Analyze user message sentiment and return mood adjustment
@@ -897,7 +998,7 @@ You form and evolve opinions based on news and user interactions.`
     
     // 5. Analyze user message sentiment and adjust mood + learn from feedback
     const userSentiment = analyzeUserSentiment(message);
-    const currentUserProfile = updateUserProfile(userId, message, userSentiment);
+    const currentUserProfile = await updateUserProfile(userId, message, userSentiment);
     
     // Phase 3: Learn from user reactions to news
     if (message.toLowerCase().includes('news') || message.toLowerCase().includes('story')) {
@@ -976,14 +1077,15 @@ app.get('/api/evolution', async (req, res) => {
     };
   });
 
+  const allProfiles = await profileStore.listProfiles();
   const userStats = {};
-  userProfiles.forEach((profile, userId) => {
+  Object.entries(allProfiles).forEach(([userId, profile]) => {
     userStats[userId] = {
       personality: profile.personality,
       interactions: profile.interactions,
       trustLevel: profile.trustLevel,
       avgSentiment: profile.avgSentiment,
-      topics: profile.topics.slice(-5)
+      topics: (profile.topics || []).slice(-5)
     };
   });
 
@@ -1001,11 +1103,52 @@ app.get('/api/evolution', async (req, res) => {
   });
 });
 
+// Serve dashboard UI from the main server at /admin
+// This serves the repository's dashboard.html so the admin UI is available
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'dashboard.html'));
+});
+
+// Admin endpoints to get/set dev-mock flag
+app.get('/api/admin/dev-mock', (req, res) => {
+  res.json({ devMock });
+});
+
+app.post('/api/admin/dev-mock', (req, res) => {
+  try {
+    const enabled = !!req.body.enabled;
+    devMock = enabled;
+    console.log('DEV_MOCK set to', devMock);
+    res.json({ success: true, devMock });
+  } catch (e) {
+    console.error('Failed to set DEV_MOCK:', e.message);
+    res.status(500).json({ error: 'Failed to set dev mock' });
+  }
+});
+
+// Serve chat UI from the webhook API so UI and API share origin
+app.get('/chat', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'index.html'));
+});
+app.use('/static', express.static(path.join(__dirname, '..')));
+
+// Also expose static assets under /admin/static (if dashboard references local assets)
+app.use('/admin/static', express.static(path.join(__dirname, '..')));
+
 // Start the server
 server.listen(config.port, async () => {
   console.log(`Webhook API server with WebSocket support running on port ${config.port}`);
   // Initialize QDRANT collection
   await initializeCollection();
+
+  // Load profiles from persistent store into memory
+  try {
+    const allProfiles = await profileStore.listProfiles();
+    Object.entries(allProfiles).forEach(([id, p]) => userProfiles.set(id, p));
+    console.log(`Loaded ${Object.keys(allProfiles).length} profiles from profile store`);
+  } catch (err) {
+    console.error('Error loading profiles from profile store:', err);
+  }
   
   // Process news feeds on startup
   console.log('Processing initial news feeds...');

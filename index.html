@@ -152,7 +152,7 @@
     <div class="menu-bar">
         <h1>PHPaibot - AI Chat</h1>
         <div class="menu-links">
-            <a href="dashboard.html" target="_blank">📊 Dashboard</a>
+            <a id="dashboardLink" href="#" target="_blank">📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
             <a href="#" onclick="processNews()">📰 News</a>
         </div>
@@ -168,7 +168,19 @@
     </div>
 </div>
 
-<script>
+    <script>
+        // Determine API base. If opened via file:// or hostname is empty, default to localhost:4002
+        const detectedBase = (window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : ''));
+        let API_BASE = detectedBase;
+        // Allow overriding via query param ?api_base=
+        const params = new URLSearchParams(window.location.search);
+        const override = params.get('api_base');
+        if (window.location.protocol === 'file:' || !window.location.hostname) {
+            API_BASE = override || 'http://localhost:4002';
+        } else if (override) {
+            API_BASE = override;
+        }
+
     document.addEventListener('DOMContentLoaded', () => {
         const chatBox = document.getElementById('chat-box');
         const messageInput = document.getElementById('message-input');
@@ -177,8 +189,18 @@
         const userId = 'user_' + Date.now(); // Simple unique ID for the user session
         let isTyping = false;
 
+        // Ensure the dashboard link points to the webhook API admin route
+        try {
+            const dashboardLink = document.getElementById('dashboardLink');
+            if (dashboardLink) dashboardLink.href = API_BASE + '/admin';
+        } catch (e) {
+            console.error('Could not set dashboard link:', e);
+        }
+
         // --- WebSocket for Server-Pushed Messages ---
-        const ws = new WebSocket('ws://localhost:3000');
+        // Derive WebSocket URL from API_BASE (ws for http, wss for https)
+        const wsBase = API_BASE.replace(/^http/, 'ws');
+        const ws = new WebSocket(wsBase);
 
         ws.onopen = () => {
             console.log('WebSocket connection established');
@@ -219,7 +241,7 @@
             isTyping = false; // Reset typing flag after sending
             
             try {
-                const response = await fetch('http://localhost:3000/api/chat', {
+                const response = await fetch(`${API_BASE}/api/chat`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -295,7 +317,7 @@
     // Menu functions
     async function checkMood() {
         try {
-            const response = await fetch('http://localhost:3000/api/mood');
+            const response = await fetch(`${API_BASE}/api/mood`);
             const mood = await response.json();
             alert(`AI Mood: ${mood.description} (${mood.score})\nTopics: ${mood.topics.slice(0, 5).join(', ')}`);
         } catch (error) {
@@ -305,7 +327,7 @@
 
     async function processNews() {
         try {
-            const response = await fetch('http://localhost:3000/api/process-news', { method: 'POST' });
+            const response = await fetch(`${API_BASE}/api/process-news`, { method: 'POST' });
             const result = await response.json();
             alert(`News processed! New mood: ${result.mood.score}`);
         } catch (error) {

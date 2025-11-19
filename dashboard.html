@@ -132,6 +132,9 @@
             <h1>PHPaibot Dashboard</h1>
             <p>Monitor AI mood, recent activity, and system status</p>
             <button class="refresh-btn" onclick="loadDashboard()">Refresh</button>
+            <button class="refresh-btn" style="background:#fd7e14;margin-left:8px;" onclick="resetMood()">Reset Mood</button>
+            <button class="refresh-btn" style="background:#dc3545;margin-left:8px;" onclick="clearNewsConfirm()">Clear News</button>
+            <button id="devMockBtn" class="refresh-btn" style="background:#6f42c1;margin-left:8px;" onclick="toggleDevMockUI()">Dev Mock: <span id="devMockStatus">...</span></button>
         </div>
 
         <div class="cards">
@@ -160,9 +163,21 @@
     </div>
 
     <script>
+        // Determine API base. If opened via file:// or hostname is empty, default to localhost:4002
+        const detectedBase = (window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : ''));
+        let API_BASE = detectedBase;
+        // Allow overriding via query param ?api_base=
+        const params = new URLSearchParams(window.location.search);
+        const override = params.get('api_base');
+        if (window.location.protocol === 'file:' || !window.location.hostname) {
+            API_BASE = override || 'http://localhost:4002';
+        } else if (override) {
+            API_BASE = override;
+        }
+
         async function loadDashboard() {
             try {
-                const response = await fetch('http://localhost:3000/api/dashboard');
+                const response = await fetch(`${API_BASE}/api/dashboard`);
                 const data = await response.json();
                 
                 // Update mood info
@@ -213,7 +228,10 @@
                 `).join('');
                 
                 document.getElementById('news-stories').innerHTML = newsHtml || '<p>No recent news stories</p>';
-                
+
+                // Refresh admin/dev-mock status
+                if (typeof getDevMockStatus === 'function') getDevMockStatus();
+
             } catch (error) {
                 console.error('Error loading dashboard:', error);
                 document.getElementById('mood-info').innerHTML = '<p style="color: red;">Error loading data</p>';
@@ -231,7 +249,7 @@
             if (!confirm('Delete this news entry?')) return;
             
             try {
-                const response = await fetch(`http://localhost:3000/api/news/${newsId}`, {
+                const response = await fetch(`${API_BASE}/api/news/${newsId}`, {
                     method: 'DELETE'
                 });
                 
@@ -250,14 +268,12 @@
         // Bulk delete Wolfram Alpha entries
         async function bulkDeleteWolfram() {
             if (!confirm('Delete all Wolfram Alpha entries? This cannot be undone.')) return;
-            
             try {
-                const response = await fetch('http://localhost:3000/api/news/bulk', {
+                const response = await fetch(`${API_BASE}/api/news/bulk`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filter: 'Wolfram' })
                 });
-                
                 const result = await response.json();
                 if (response.ok) {
                     alert(`Deleted ${result.deleted} Wolfram Alpha entries`);
@@ -268,6 +284,108 @@
             } catch (error) {
                 console.error('Error bulk deleting:', error);
                 alert('Error bulk deleting entries');
+            }
+        }
+
+        // Reset mood via admin endpoint
+        async function resetMood() {
+            if (!confirm('Reset AI mood to neutral?')) return;
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/reset-mood`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                const result = await response.json();
+                if (response.ok) {
+                    alert('Mood reset successfully');
+                    loadDashboard();
+                } else {
+                    alert('Failed to reset mood');
+                }
+            } catch (error) {
+                console.error('Error resetting mood:', error);
+                alert('Error resetting mood');
+            }
+        }
+
+        // Confirm and clear news via admin endpoint
+        function clearNewsConfirm() {
+            if (!confirm('Clear processed news entries from the database and reset mood? This will delete news context stored in Qdrant.')) return;
+            const limitInput = prompt('How many entries should be cleared? (default 100)');
+            const limit = limitInput ? parseInt(limitInput, 10) || 100 : 100;
+            clearNews(limit);
+        }
+
+        async function clearNews(limit = 100) {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/clear-news`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limit })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`Cleared ${result.deleted} news entries and reset mood`);
+                    loadDashboard();
+                } else {
+                    alert('Failed to clear news entries');
+                }
+            } catch (error) {
+                console.error('Error clearing news:', error);
+                alert('Error clearing news entries');
+            }
+        }
+
+        // Admin dev-mock functions
+        async function getDevMockStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/admin/dev-mock`);
+                if (!res.ok) return updateDevMockUI(null);
+                const body = await res.json();
+                updateDevMockUI(!!body.devMock);
+            } catch (e) {
+                console.error('Error fetching dev-mock status:', e);
+                updateDevMockUI(null);
+            }
+        }
+
+        function updateDevMockUI(enabled) {
+            const statusEl = document.getElementById('devMockStatus');
+            const btn = document.getElementById('devMockBtn');
+            if (!statusEl || !btn) return;
+            if (enabled === null) {
+                statusEl.textContent = 'unknown';
+                btn.style.opacity = '0.6';
+            } else if (enabled) {
+                statusEl.textContent = 'ON';
+                btn.style.background = '#20c997';
+                btn.style.color = '#fff';
+                btn.style.opacity = '1';
+            } else {
+                statusEl.textContent = 'OFF';
+                btn.style.background = '#6f42c1';
+                btn.style.color = '#fff';
+                btn.style.opacity = '1';
+            }
+        }
+
+        async function toggleDevMockUI() {
+            try {
+                const currentResponse = await fetch(`${API_BASE}/api/admin/dev-mock`);
+                const data = currentResponse.ok ? await currentResponse.json() : { devMock: false };
+                const newState = !data.devMock;
+                const res = await fetch(`${API_BASE}/api/admin/dev-mock`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: newState })
+                });
+                if (res.ok) {
+                    updateDevMockUI(newState);
+                    alert('Dev mock ' + (newState ? 'enabled' : 'disabled'));
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    alert('Failed to toggle dev-mock: ' + (err.error || res.status));
+                }
+            } catch (e) {
+                console.error('Error toggling dev-mock:', e);
+                alert('Error toggling dev-mock');
             }
         }
     </script>

@@ -61,21 +61,30 @@ PHPaibot uses a sophisticated architecture with external data integration:
     cd PHPaibot
     ```
 
-2.  **Configure Remote Services:**
+2.  **Configure Remote Services (production):**
     Open `docker-compose.yml` and ensure the environment variables point to your services:
-    - `LLM_URL` and `EMBEDDING_URL` for Ollama
+    - `LLM_URL` and `EMBEDDING_URL` for an OpenAI-compatible gateway (e.g., Ollama, OpenRouter)
     - `QDRANT_URL` for vector database
 
-3.  **Start the Docker services:**
+3.  **Start the Docker services (or run the webhook API directly):**
     ```bash
     docker-compose up -d
+    # or run the webhook API directly for development:
+    PORT=4002 node webhook-api/server.js
     ```
 
 4.  **Access the Chat Interface:**
-    Open your browser and navigate to:
-    **http://localhost:8889/index.html**
+    - If serving via the webhook API (recommended): `http://localhost:4002/chat`
+    - If serving via the PHP/Apache container at `:8889`: `http://localhost:8889/index.html?api_base=http://localhost:4002`
 
-5.  **Optional: Setup Automated News Processing:**
+5.  **Development mock mode:**
+    The server has a dev-mock mode to allow local testing without external LLM/embedding services:
+    - Start with `DEV_MOCK=true` in the environment to enable the mock on startup.
+    - Or toggle at runtime via the admin endpoint:
+      - `GET /api/admin/dev-mock` — returns `{ devMock: true|false }`
+      - `POST /api/admin/dev-mock` — JSON body `{ "enabled": true|false }` to enable/disable the mock
+
+6.  **Optional: Setup Automated News Processing:**
     ```bash
     ./setup-cron.sh
     ```

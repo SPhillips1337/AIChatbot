@@ -193,14 +193,33 @@ class NewsProcessor {
   loadMoodState() {
     try {
       if (fs.existsSync(this.newsPath)) {
-        this.moodState = JSON.parse(fs.readFileSync(this.newsPath, 'utf8'));
-        // Clean up unwanted topics
-        this.moodState.topics = this.moodState.topics.filter(topic => 
-          !topic.includes('Wolfram') && 
-          !topic.includes('hosting') && 
-          !topic.includes('Location') &&
-          !topic.includes('Amsterdam')
-        );
+        try {
+          this.moodState = JSON.parse(fs.readFileSync(this.newsPath, 'utf8'));
+        } catch (err) {
+          console.error('Failed to read primary news file, will try fallback:', err.message);
+          const os = require('os');
+          const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
+          if (fs.existsSync(fallbackPath)) {
+            try {
+              this.moodState = JSON.parse(fs.readFileSync(fallbackPath, 'utf8'));
+              this.newsPath = fallbackPath;
+              console.log('Loaded mood state from fallback:', fallbackPath);
+            } catch (e) {
+              console.error('Failed to read fallback mood file:', e.message);
+            }
+          }
+        }
+        if (this.moodState && Array.isArray(this.moodState.topics)) {
+          // Clean up unwanted topics
+          this.moodState.topics = this.moodState.topics.filter(topic => 
+            !topic.includes('Wolfram') && 
+            !topic.includes('hosting') && 
+            !topic.includes('Location') &&
+            !topic.includes('Amsterdam')
+          );
+        } else {
+          this.moodState.topics = this.moodState.topics || [];
+        }
       }
     } catch (error) {
       console.error('Error loading mood state:', error.message);
@@ -211,7 +230,16 @@ class NewsProcessor {
     try {
       fs.writeFileSync(this.newsPath, JSON.stringify(this.moodState, null, 2));
     } catch (error) {
-      console.error('Error saving mood state:', error.message);
+      console.error('Error saving mood state to', this.newsPath, error.message);
+      try {
+        const os = require('os');
+        const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
+        fs.writeFileSync(fallbackPath, JSON.stringify(this.moodState, null, 2));
+        this.newsPath = fallbackPath;
+        console.log('Saved mood state to fallback path:', fallbackPath);
+      } catch (e) {
+        console.error('Failed to save mood state to fallback path:', e.message);
+      }
     }
   }
 

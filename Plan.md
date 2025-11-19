@@ -38,9 +38,21 @@ The project has evolved into a lightweight, proof-of-concept demonstrating a hyb
 ### Phase 3: Personality & Evolution
 - **Goal**: Create a chatbot that adapts over time and develops a unique personality.
 - **Tasks**:
-    - Add a Profile store (e.g., a `profile.json` file) to track user interests and Aura's personality traits (e.g., "curious, witty, helpful").
-    - Enhance the "Thinker" loop to consult the profile when generating new thoughts, making them more personalized.
-    - Implement a mechanism for the AI to update the user profile based on topics discussed in conversation.
+    - Add a Profile store (e.g., a `profile.json` file) to track user interests and Aura's personality traits (e.g., "curious, witty, helpful"). (Implemented)
+    - Enhance the "Thinker" loop to consult the profile when generating new thoughts, making them more personalized. (In progress)
+    - Implement a mechanism for the AI to update the user profile based on topics discussed in conversation. (In progress)
+    - Add admin controls and a dev-mock toggle to allow safe local testing without external LLM/embedding services. (Implemented)
+    - Serve the chat UI from the webhook API so UI and API share origin and avoid CORS/override query parameters. (Implemented)
 
 ## Next Steps
-The immediate next step is to begin **Phase 2** by replacing the static, hardcoded array of questions with a dynamic generation process, making Aura a true "thinker".
+- Short-term:
+    - Finish feedback loop wiring so user feedback updates the personality/opinions system persistently.
+    - Harden admin endpoints (add authentication) before exposing toggles in production.
+    - Point `LLM_URL` and `EMBEDDING_URL` at a production-capable gateway and verify end-to-end behavior; then disable dev-mock.
+- Medium-term:
+    - Implement long-term relationship memory and opinion consolidation from news + user interactions.
+    - Add automated tests and monitoring for news processing and persistence.
+
+Notes:
+- You can toggle dev-mock at runtime via `POST /api/admin/dev-mock` (JSON `{ "enabled": true|false }`).
+- For local testing, start the webhook API with `PORT=4002` (or your preferred port) and open the chat at `http://localhost:4002/chat` or use `index.html?api_base=http://localhost:4002` if serving via PHP.

@@ -1,0 +1,89 @@
+{
+  "testuser": {
+    "interactions": 3,
+    "avgSentiment": 0.3333333333333333,
+    "topics": [
+      "gardening",
+      "astronomy",
+      "hello",
+      "there",
+      "again"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-18T12:49:36.125Z",
+    "preferences": {},
+    "trustLevel": 7,
+    "created_at": "2025-11-18T00:00:00.000Z",
+    "updated_at": "2025-11-18T12:49:36.125Z"
+  },
+  "user_1763469998908": {
+    "interactions": 1,
+    "avgSentiment": 0,
+    "topics": [
+      "hello"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-18T12:46:47.263Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "updated_at": "2025-11-18T12:46:47.263Z"
+  },
+  "user_1763470336954": {
+    "interactions": 1,
+    "avgSentiment": 0,
+    "topics": [
+      "hello"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-18T12:52:28.721Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "updated_at": "2025-11-18T12:52:28.721Z"
+  },
+  "user_1763554132413": {
+    "interactions": 9,
+    "avgSentiment": 0.1111111111111111,
+    "topics": [
+      "advancements",
+      "clean",
+      "large",
+      "volume",
+      "energy",
+      "generation,",
+      "feeds",
+      "green",
+      "topics",
+      "climate",
+      "change",
+      "postive",
+      "international",
+      "kindness",
+      "where",
+      "encouraged",
+      "people",
+      "shared",
+      "name?",
+      "stephen"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-19T12:14:58.397Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "updated_at": "2025-11-19T12:14:58.397Z"
+  },
+  "user_1763554504628": {
+    "interactions": 1,
+    "avgSentiment": 0,
+    "topics": [
+      "hello",
+      "aura,",
+      "remember",
+      "name?"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-19T12:15:16.214Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "updated_at": "2025-11-19T12:15:16.214Z"
+  }
+}

@@ -2,51 +2,50 @@
   "project": {
     "name": "PHPaibot",
     "description": "A proactive PHP chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "repository": "https://github.com/username/PHPaibot",
-    "status": "Phase 2 Complete - Dynamic thought generation with news integration"
+    "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API"
   },
   "architecture": {
-    "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote Ollama endpoint for LLM and embeddings. Proactive thoughts are dynamically generated and influenced by current events.",
+    "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote LLM and embedding endpoints. Proactive thoughts are dynamically generated and influenced by current events.",
     "components": {
       "conversationalLoop": {
-        "description": "Fast, reactive chat system using QDRANT vector database for semantic search.",
+        "description": "Fast, reactive chat system using QDRANT for semantic search.",
         "implementation": "Node.js backend handles chat requests, retrieves context from QDRANT, and calls remote LLM.",
         "files": ["webhook-api/server.js", "index.html"],
         "status": "Implemented"
       },
       "cognitiveLoop": {
         "description": "Dynamic thought generation system that creates contextual, news-aware proactive thoughts.",
-        "implementation": "LLM-powered thought generation with 30% chance of news-influenced thoughts. Separates proactive thoughts from conversational responses.",
+        "implementation": "LLM-powered thought generation with news-influenced augmentation. Separates proactive thoughts from conversational responses.",
         "status": "Implemented"
       },
       "memorySystem": {
         "description": "QDRANT vector database for semantic conversation storage and retrieval.",
-        "implementation": "Stores conversations and news context with 1024-dimensional embeddings. Supports semantic search and filtering.",
+        "implementation": "Stores conversations and news context with embeddings. Supports semantic search and filtering.",
         "status": "Implemented"
       },
       "newsProcessing": {
         "description": "Automated news feed processing with emotional analysis and mood tracking.",
-        "implementation": "Processes BBC RSS feeds every 30 minutes, analyzes sentiment, updates mood state (-10 to +10), and stores context in QDRANT.",
+        "implementation": "Processes RSS feeds, analyzes sentiment, updates mood state (-10 to +10), and stores context in QDRANT.",
         "files": ["webhook-api/news-processor.js", "webhook-api/news-data.json"],
         "status": "Implemented"
       },
       "emotionalIntelligence": {
         "description": "Mood system that tracks AI emotional state based on news sentiment.",
-        "implementation": "Maintains mood score (-10 to +10) and topic memory. Influences thought generation and conversation style.",
+        "implementation": "Maintains mood score and topic memory. Influences thought generation and conversation style.",
         "status": "Implemented"
       },
       "infrastructureComponents": {
         "description": "Docker-based infrastructure with external service integration.",
-        "implementation": "Docker Compose with QDRANT, SearxNG, and remote Ollama integration.",
+        "implementation": "Docker Compose with optional QDRANT and external LLM/embedding endpoints.",
         "components": [
           {"name": "QDRANT vector database", "status": "Implemented", "url": "http://192.168.5.227:6333/"},
-          {"name": "SearxNG RSS parser", "status": "Implemented", "url": "http://192.168.5.227:4040/"},
-          {"name": "Remote Ollama endpoint", "status": "Implemented"},
+          {"name": "Remote LLM/Embedding endpoints", "status": "Configured via env", "note": "Set LLM_URL and EMBEDDING_URL"},
           {"name": "Node.js webhook API", "status": "Implemented"},
           {"name": "PHP Web server", "status": "Implemented"}
         ],
-        "status": "Partially Provisioned - requires external services"
+        "status": "Partially Provisioned - requires external services or dev-mock"
       }
     }
   },
@@ -89,11 +88,11 @@
         "name": "Personality & Evolution",
         "description": "Add adaptive personality and learning mechanisms.",
         "tasks": [
-          {"name": "Add Profile store for user/bot personality traits", "status": "Planned"},
-          {"name": "Create feedback loops for continuous learning", "status": "Planned"},
-          {"name": "Develop opinion formation mechanisms", "status": "Planned"},
+          {"name": "Add Profile store for user/bot personality traits", "status": "Implemented"},
+          {"name": "Create feedback loops for continuous learning", "status": "In Progress"},
+          {"name": "Develop opinion formation mechanisms", "status": "In Progress"},
           {"name": "Implement long-term memory and relationship tracking", "status": "Planned"},
-          {"name": "Add personality adaptation based on user interactions", "status": "Planned"}
+          {"name": "Add personality adaptation based on user interactions", "status": "In Progress"}
         ],
         "deliverables": ["Chatbot that adapts and develops personality over time."],
         "status": "In Progress"
@@ -102,32 +101,35 @@
   },
   "currentCapabilities": [
     "Dynamic thought generation using LLM",
-    "News-aware personality with BBC RSS integration",
+    "News-aware personality with RSS integration",
     "Emotional state tracking (-10 to +10 mood scale)",
     "Context-aware conversations using QDRANT semantic search",
     "Proactive engagement with natural conversation flow",
     "Real-time WebSocket communication",
     "Automated news processing every 30 minutes",
     "Sentiment analysis and topic extraction",
-    "Scalable vector database architecture"
+    "Runtime dev-mock mode for local testing and admin toggle"
   ],
   "apiEndpoints": [
     {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface"},
     {"endpoint": "/api/mood", "method": "GET", "description": "Check AI emotional state and topics"},
-    {"endpoint": "/api/process-news", "method": "GET/POST", "description": "Trigger manual news processing"}
+    {"endpoint": "/api/process-news", "method": "GET/POST", "description": "Trigger manual news processing"},
+    {"endpoint": "/api/admin/dev-mock", "method": "GET/POST", "description": "View and toggle development mock mode"},
+    {"endpoint": "/api/users/:userId/profile", "method": "GET", "description": "Retrieve user profile"},
+    {"endpoint": "/chat", "method": "GET", "description": "Serve chat UI from webhook API (same origin)"}
   ],
   "nextSteps": [
-    "Implement user personality profiling and preferences",
-    "Add long-term relationship memory beyond individual conversations",
+    "Complete feedback loops for continuous learning",
+    "Implement long-term relationship memory beyond individual conversations",
     "Create opinion formation based on accumulated news and interactions",
-    "Develop feedback mechanisms for continuous learning",
-    "Add more diverse news sources and content types"
+    "Harden admin endpoints with authentication",
+    "Integrate a production LLM/embedding service and disable dev-mock for live runs"
   ],
   "statusDetails": {
     "externalServices": {
       "qdrant": "Specify QDRANT_URL (e.g. http://host:6333) - required",
-      "llm": "Specify LLM_URL (OpenAI-compatible) - required",
-      "embeddings": "Specify EMBEDDING_URL (OpenAI-compatible) - required",
+      "llm": "Specify LLM_URL (OpenAI-compatible) - required if dev-mock is disabled",
+      "embeddings": "Specify EMBEDDING_URL (OpenAI-compatible) - required if dev-mock is disabled",
       "searxng": "Optional - URL for RSS parsing if used"
     },
     "requiredEnv": [
@@ -135,9 +137,9 @@
       "EMBEDDING_URL",
       "QDRANT_URL",
       "PORT (optional)",
-      "DEBUG flags as needed"
+      "DEV_MOCK (optional)"
     ],
-    "notes": "This project expects external services for LLM, embeddings, and vector DB. Ensure these are reachable and properly configured before running the webhook API."
+    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock."
   },
-  "lastUpdated": "2025-11-17T12:30:00Z"
+  "lastUpdated": "2025-11-18T12:50:00Z"
 }

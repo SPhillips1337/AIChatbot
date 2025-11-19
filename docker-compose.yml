@@ -68,13 +68,12 @@ services:
     ports:
       - "3000:3000"
     command: >
-      sh -c "npm install && 
+      sh -c "npm install && \
              node server.js"
+    env_file:
+      - .env
     environment:
-      - PORT=3000
-      - LLM_URL=https://automatically-bedford-horse-solutions.trycloudflare.com/
-      - EMBEDDING_URL=https://automatically-bedford-horse-solutions.trycloudflare.com/
-      - QDRANT_URL=http://192.168.5.227:6333
+      - PORT=${PORT:-3000}
     restart: unless-stopped
     depends_on: []
 
