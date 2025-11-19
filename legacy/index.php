@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PHPaibot - A Thinking Chatbot</title>
+    <title>AURA.ai Chatbot - A Thinking Chatbot</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -74,7 +74,7 @@
     </style>
 </head>
 <body>
-    <h1>PHPaibot - A Thinking Chatbot</h1>
+    <h1>AURA.ai Chatbot - A Thinking Chatbot</h1>
     
     <div class="chat-container" id="chat-container">
         <!-- Messages will be displayed here -->
