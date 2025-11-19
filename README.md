@@ -38,10 +38,12 @@ PHPaibot uses a sophisticated architecture with external data integration:
 - **Context-Aware Thoughts**: References recent conversations and current events
 - **Natural Conversation Model**: Separates proactive thoughts from conversational responses
 
-### 🔄 **Phase 3: Personality & Evolution** [Planned]
-- Persistent user/bot personality profiles
-- Feedback loops for continuous learning
-- Opinion formation mechanisms
+### 🔄 **Phase 3: Personality & Evolution** [In Progress]
+- **User & Bot Profiles (Implemented)**: `profileStore` persists user interests, sentiment averages, trust level, and conversation topics.
+- **Feedback Loops (In Progress)**: `/api/feedback` lets conversations update the personality system; the dashboard visualizes evolving state.
+- **Opinion Formation (In Progress)**: `/api/opinions` exposes Aura’s topic-level opinions derived from news mood + feedback signals.
+- **Admin / Dev Controls (Implemented)**: `/api/admin/dev-mock`, `/api/admin/reset-mood`, `/api/admin/clear-news`, and the `/admin` dashboard make tuning and testing easier.
+- **Unified UI Origin (Implemented)**: The webhook API now serves `/chat` so the SPA and API share origin and avoid manual query overrides.
 
 ## Getting Started
 
@@ -91,9 +93,17 @@ PHPaibot uses a sophisticated architecture with external data integration:
 
 ## API Endpoints
 
+- **`/chat`** - Serves the chat UI directly from the webhook API (GET)
 - **`/api/chat`** - Main chat endpoint (POST)
 - **`/api/mood`** - Check AI emotional state and topics (GET)
 - **`/api/process-news`** - Trigger news processing (GET/POST)
+- **`/api/dashboard`** - Aggregated Phase‑3 telemetry for the admin dashboard (GET)
+- **`/api/users`**, **`/api/users/:userId/profile`** - Inspect persisted user/bot profile data (GET)
+- **`/api/opinions`**, **`/api/opinions/:topic`** - Read Aura’s evolving opinions (GET)
+- **`/api/feedback`** - Submit topic-level feedback that shapes opinions (POST)
+- **`/api/news/:id`**, **`/api/news/bulk`** - Manage stored news vectors (DELETE)
+- **`/api/admin/dev-mock`** - Toggle dev mock mode (GET/POST)
+- **`/api/admin/reset-mood`**, **`/api/admin/clear-news`** - Reset mood state or clear news embeddings (POST)
 
 ## News Integration
 

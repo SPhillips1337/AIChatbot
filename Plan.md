@@ -7,14 +7,16 @@ Create a proactive PHP chatbot that simulates human-like thinking by:
 3. Developing a personality that evolves based on user interactions
 4. Initiating conversations rather than just responding
 
-## Architecture Overview (Current PoC)
+## Architecture Overview (Current Implementation)
 
-The project has evolved into a lightweight, proof-of-concept demonstrating a hybrid push/pull chat system.
+The proof-of-concept has matured into a production-style hybrid push/pull chat system with persistent memory and Phase‑3 personality features.
 
-- **Frontend (HTML/JS)**: A single-page chat interface that uses WebSockets to receive proactive messages and standard HTTP requests (Fetch) to send user messages.
-- **Backend (Node.js)**: An Express.js server that runs the main chat logic, including a WebSocket server for pushing messages and an API for handling user responses.
-- **Remote AI Models**: The system uses a remote, OpenAI-compatible endpoint (like Ollama) for both language model inference and text embeddings.
-- **Memory (JSON File)**: Conversation history and vectors are stored in a local `db.json` file. The backend performs an in-memory cosine similarity search for context retrieval.
+- **Frontend (HTML/JS)**: A single-page chat interface served directly from the webhook API at `/chat`. It uses WebSockets for proactive thoughts and HTTP (Fetch) for user messages so UI and API share the same origin.
+- **Backend (Node.js)**: The Express.js webhook API (`webhook-api/server.js`) manages chat logic, proactive engagement timers, admin APIs, the dashboard data feed, and WebSocket push delivery.
+- **Remote AI Models**: The server calls OpenAI-compatible endpoints for `/v1/chat/completions` and `/v1/embeddings` (e.g., Ollama, OpenRouter). A `DEV_MOCK` flag or `/api/admin/dev-mock` toggles canned responses for local testing.
+- **Memory (Qdrant Vector DB)**: Conversations, news context, and thoughts are stored in Qdrant (`@qdrant/js-client-rest`). Embeddings come from the remote endpoint; dev-mock returns deterministic vectors for development.
+- **News Processor & Mood System**: `webhook-api/news-processor.js` ingests RSS feeds, scores sentiment, updates `news-data.json`, and stores embeddings, providing inputs to proactive thoughts and the dashboard.
+- **Profile & Personality Store**: `webhook-api/profileStore.js` persists user/bot traits to `profile.json`; the in-memory `personalitySystem` tracks evolving opinions exposed via `/api/opinions`.
 
 ## Phased Development Plan
 
@@ -23,7 +25,7 @@ The project has evolved into a lightweight, proof-of-concept demonstrating a hyb
 - **Achievements**:
     - Implemented a WebSocket push-based frontend (`index.html`) and a Node.js backend (`webhook-api/server.js`).
     - Externalized AI models to a remote Ollama endpoint, removing all local AI/ML Docker services.
-    - Replaced the Qdrant vector database with a lightweight local `db.json` file for memory, including an in-memory cosine similarity search for context retrieval.
+    - Integrated the Qdrant vector database for semantic memory (with dev-mock embeddings for local runs).
     - Implemented a robust conversational memory system that provides context to the AI.
     - Created an idle timer system to manage when the AI sends proactive thoughts, making the interaction more natural.
 
@@ -37,12 +39,12 @@ The project has evolved into a lightweight, proof-of-concept demonstrating a hyb
 
 ### Phase 3: Personality & Evolution
 - **Goal**: Create a chatbot that adapts over time and develops a unique personality.
-- **Tasks**:
-    - Add a Profile store (e.g., a `profile.json` file) to track user interests and Aura's personality traits (e.g., "curious, witty, helpful"). (Implemented)
-    - Enhance the "Thinker" loop to consult the profile when generating new thoughts, making them more personalized. (In progress)
-    - Implement a mechanism for the AI to update the user profile based on topics discussed in conversation. (In progress)
-    - Add admin controls and a dev-mock toggle to allow safe local testing without external LLM/embedding services. (Implemented)
-    - Serve the chat UI from the webhook API so UI and API share origin and avoid CORS/override query parameters. (Implemented)
+- **Status Snapshot**:
+    - Profile store (`profileStore.js` + `/api/users`) persists sentiment, trust, topics. **Implemented**
+    - Personality system tracks evolving opinions exposed via `/api/opinions` and updated by `/api/feedback`. **In Progress**
+    - Thought generation consults profiles + news (see `updateUserProfile` + `newsProcessor.generateNewsInfluencedThought`). **In Progress**
+    - Admin/dashboard endpoints (`/api/dashboard`, `/api/admin/*`, `/admin`) provide operational visibility and controls. **Implemented**
+    - Unified UI origin (`/chat` served by the webhook API). **Implemented**
 
 ## Next Steps
 - Short-term:
@@ -55,4 +57,4 @@ The project has evolved into a lightweight, proof-of-concept demonstrating a hyb
 
 Notes:
 - You can toggle dev-mock at runtime via `POST /api/admin/dev-mock` (JSON `{ "enabled": true|false }`).
-- For local testing, start the webhook API with `PORT=4002` (or your preferred port) and open the chat at `http://localhost:4002/chat` or use `index.html?api_base=http://localhost:4002` if serving via PHP.
+- For local testing, start the webhook API with `PORT=4002` (or your preferred port) and open the chat at `http://localhost:4002/chat` (served by the Node app) or use `index.html?api_base=http://localhost:4002` if you prefer the PHP container.
