@@ -171,32 +171,32 @@
     "updated_at": "2025-11-19T16:38:28.409Z"
   },
   "b5dd4d55-1740-40c1-ae45-f2e4d0189ea6": {
-    "interactions": 6,
-    "avgSentiment": 0.16666666666666666,
+    "interactions": 29,
+    "avgSentiment": 0.06896551724137931,
     "topics": [
-      "transcribe",
-      "meetings",
-      "raised,",
-      "chatbots",
-      "whole",
-      "variety",
-      "crypto",
-      "related",
-      "indicators",
-      "bootstrap",
-      "knowledge",
-      "doing,",
-      "consultancy",
-      "business",
-      "happymonkey.ai",
-      "sorry",
-      "disconnected,",
-      "talking",
-      "about",
-      "last?"
+      "using",
+      "write",
+      "emails",
+      "marketing",
+      "customer",
+      "sales",
+      "leads",
+      "optimizing",
+      "internal",
+      "workflows",
+      "previously",
+      "something",
+      "development",
+      "evolutionary",
+      "suppose",
+      "available",
+      "think",
+      "personal",
+      "projects",
+      "probably"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-19T16:57:48.587Z",
+    "lastSeen": "2025-11-19T17:23:46.491Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -206,9 +206,23 @@
         "confidence": 0.99,
         "source": "user_display_name",
         "updatedAt": "2025-11-19T16:54:34.255Z"
+      },
+      "favorite_color": {
+        "value": "blue",
+        "label": "favorite color",
+        "confidence": 0.85,
+        "source": "my favorite color is blue",
+        "updatedAt": "2025-11-19T17:18:07.905Z"
+      },
+      "location": {
+        "value": "Devon",
+        "label": "hometown",
+        "confidence": 0.7,
+        "source": "I live in Devon",
+        "updatedAt": "2025-11-19T17:19:15.409Z"
       }
     },
     "displayName": "Stephen",
-    "updated_at": "2025-11-19T16:57:48.587Z"
+    "updated_at": "2025-11-19T17:23:46.491Z"
   }
 }

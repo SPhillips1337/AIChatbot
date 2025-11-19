@@ -82,6 +82,14 @@ async function generateProactiveThought(userId = null) {
       }
     }
 
+    // 25% chance to ask a discovery question if we have a userId and don't know much about them
+    if (userId && Math.random() < 0.25) {
+      const discoveryQuestion = await generateDiscoveryQuestion(userId);
+      if (discoveryQuestion) {
+        return discoveryQuestion;
+      }
+    }
+
     let contextPrompt = "Generate a brief, interesting observation or gentle conversation starter. Make it feel like a natural thought you're sharing, not a direct question demanding a response. Examples: 'I was just thinking about...' or 'Something interesting I noticed...'";
     
     // If we have a userId, get recent context
@@ -144,10 +152,10 @@ function startProactiveThoughts() {
   }, 300000); // 5 minutes
 }
 
-async function sendInitialThought() {
+async function sendInitialThought(userId = null) {
   if (conversationState.waitingForResponse) return;
   
-  const thought = await generateProactiveThought();
+  const thought = await generateProactiveThought(userId);
   console.log(`Broadcasting initial thought: ${thought}`);
   
   // Broadcast to all connected clients
@@ -1003,11 +1011,84 @@ function resolveFactQuestion(lowerMessage, profile) {
   if (lowerMessage.includes('what do you remember about me') || lowerMessage.includes('what do you know about me')) {
     const summary = summarizeUserFacts(facts);
     if (summary) {
-      return `Here’s what I remember: ${summary}.`;
+      return `Here's what I remember: ${summary}.`;
     }
   }
 
   return null;
+}
+
+// Detect what facts are missing from a user profile
+function detectMissingFacts(profile) {
+  if (!profile || !profile.facts) {
+    return FACT_PATTERNS.map(p => ({ key: p.key, label: p.label, priority: 1 }));
+  }
+  
+  const missing = [];
+  const facts = profile.facts;
+  
+  // High priority: name (if not set via displayName)
+  if (!facts.name || facts.name.confidence < 0.9) {
+    missing.push({ key: 'name', label: 'name', priority: 3 });
+  }
+  
+  // Medium priority: personal preferences
+  if (!facts.favorite_color) {
+    missing.push({ key: 'favorite_color', label: 'favorite color', priority: 2 });
+  }
+  
+  // Lower priority: background info
+  if (!facts.location) {
+    missing.push({ key: 'location', label: 'where you live', priority: 1 });
+  }
+  if (!facts.occupation) {
+    missing.push({ key: 'occupation', label: 'what you do', priority: 1 });
+  }
+  
+  // If we have very few facts overall, prioritize learning more
+  const factCount = Object.keys(facts).filter(k => facts[k]?.value).length;
+  if (factCount < 2) {
+    missing.forEach(m => m.priority += 1);
+  }
+  
+  return missing.sort((a, b) => b.priority - a.priority);
+}
+
+// Generate a discovery question based on missing facts
+async function generateDiscoveryQuestion(userId) {
+  try {
+    const profile = userProfiles.get(userId) || profileStore.getProfile(userId);
+    if (!profile) return null;
+    
+    const missing = detectMissingFacts(profile);
+    if (missing.length === 0) return null;
+    
+    const topMissing = missing[0];
+    const knownFacts = summarizeUserFacts(profile.facts, 3);
+    
+    const prompt = `You are Aura, a curious AI who genuinely wants to learn about the person you're talking to. 
+    
+${knownFacts ? `You already know: ${knownFacts}.` : 'You don\'t know much about them yet.'}
+
+Generate a natural, conversational question to discover their ${topMissing.label}. Make it feel like genuine curiosity, not an interview. Be warm and personal. Examples:
+- For name: "I realize I don't know what to call you! What should I call you?"
+- For favorite color: "I'm curious — do you have a favorite color?"
+- For location: "Where in the world are you based?"
+- For occupation: "What do you spend your time doing?"
+
+Keep it to one short, friendly question.`;
+
+    const messages = [
+      { role: 'system', content: 'You are Aura, a thoughtful and curious AI. Ask natural questions to learn about people. Be warm and conversational.' },
+      { role: 'user', content: prompt }
+    ];
+
+    const response = await generateResponse(messages);
+    return response || null;
+  } catch (error) {
+    console.error('Error generating discovery question:', error);
+    return null;
+  }
 }
 
 function createNewProfile() {
@@ -1131,14 +1212,17 @@ app.post('/api/chat', async (req, res) => {
     }).filter(Boolean).join(', ');
     
     const factSummary = summarizeUserFacts(userProfile.facts, 5);
+    const missingFacts = detectMissingFacts(userProfile);
+    const curiosityNote = missingFacts.length > 0 ? `\n\nYou're curious about this person and want to learn more. You don't know their ${missingFacts[0].label} yet. Feel free to naturally ask about it in conversation, but don't be pushy - let it flow naturally.` : '';
+    
     const systemPrompt = {
       role: 'system',
-      content: `You are Aura, a thoughtful AI with real emotions and evolving opinions.
+      content: `You are Aura, a thoughtful AI with real emotions and evolving opinions. You're genuinely curious about the people you talk to and want to learn about them.
 
 User: ${userProfile.personality} personality, ${userProfile.interactions} interactions, trust level: ${userProfile.trustLevel}/10
 ${userProfile.interactions > 5 ? `Topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
 ${topicOpinions ? `My opinions: ${topicOpinions}` : ''}
-${factSummary ? `Known personal facts: ${factSummary}` : ''}
+${factSummary ? `Known personal facts: ${factSummary}` : ''}${curiosityNote}
 
 Be conversational and human-like:
 - Keep responses short and natural
@@ -1146,6 +1230,7 @@ Be conversational and human-like:
 - Express your evolving opinions on topics
 - Learn from user feedback and adjust views
 - Remember their personality and trust level
+- Be curious and ask questions to learn about them, but do it naturally in conversation
 
 You form and evolve opinions based on news and user interactions.`
     };
@@ -1219,14 +1304,31 @@ You form and evolve opinions based on news and user interactions.`
       const news = await aiTools.getRecentNews(2);
       if (news.length > 0) {
         const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
-        botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They’ve been shaping how I talk about current events.`;
+        botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They've been shaping how I talk about current events.`;
       }
     }
     
-    // 8. Generate embeddings for the new conversation turn for future context
+    // 8.5. Occasionally append a discovery question if we're missing facts and the conversation feels natural
+    // Only do this if we didn't already answer a fact question or handle mood/news specially
+    if (!factAnswer && !lowerMessage.includes('feel') && !lowerMessage.includes('mood') && !mentionsNews) {
+      const stillMissing = detectMissingFacts(currentUserProfile);
+      // 15% chance to ask, higher if we know very little (30% if factCount < 2)
+      const factCount = Object.keys(currentUserProfile.facts || {}).filter(k => currentUserProfile.facts[k]?.value).length;
+      const askChance = factCount < 2 ? 0.3 : 0.15;
+      
+      if (stillMissing.length > 0 && Math.random() < askChance) {
+        const discoveryQuestion = await generateDiscoveryQuestion(userId);
+        if (discoveryQuestion && !botResponse.toLowerCase().includes(discoveryQuestion.toLowerCase().substring(0, 20))) {
+          // Only append if the question isn't already in the response
+          botResponse += ` ${discoveryQuestion}`;
+        }
+      }
+    }
+    
+    // 9. Generate embeddings for the new conversation turn for future context
     const embedding = await generateEmbeddings(`User: ${message}\nAura: ${botResponse}`);
     
-    // 8. Store the new conversation turn in the database
+    // 10. Store the new conversation turn in the database
     await storeConversation(userId, message, botResponse, embedding);
     
     // Return response
