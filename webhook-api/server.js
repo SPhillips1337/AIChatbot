@@ -952,6 +952,7 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message and userId are required' });
     }
 
+    const lowerMessage = message.toLowerCase();
     // Reset the idle timer on every user interaction
     resetIdleTimeout();
     
@@ -1004,7 +1005,18 @@ You form and evolve opinions based on news and user interactions.`
     const currentUserProfile = await updateUserProfile(userId, message, userSentiment);
     
     // Phase 3: Learn from user reactions to news
-    if (message.toLowerCase().includes('news') || message.toLowerCase().includes('story')) {
+    const mentionsNews = lowerMessage.includes('news') || lowerMessage.includes('story') || lowerMessage.includes('stories');
+    const explicitNewsRequest = mentionsNews && (
+      lowerMessage.includes('?') ||
+      lowerMessage.includes('what') ||
+      lowerMessage.includes('tell me') ||
+      lowerMessage.includes('latest') ||
+      lowerMessage.includes('update') ||
+      lowerMessage.includes('headlines') ||
+      lowerMessage.includes('summary')
+    );
+
+    if (mentionsNews) {
       const recentNews = await aiTools.getRecentNews(1);
       if (recentNews[0]) {
         personalitySystem.formOpinion(recentNews[0], userSentiment);
@@ -1017,7 +1029,7 @@ You form and evolve opinions based on news and user interactions.`
     }
     
     // 6. Check if user is asking about mood/feelings and inject real data
-    if (message.toLowerCase().includes('feel') || message.toLowerCase().includes('mood')) {
+    if (lowerMessage.includes('feel') || lowerMessage.includes('mood')) {
       const mood = await aiTools.checkMood();
       const news = await aiTools.getRecentNews(2);
       
@@ -1025,10 +1037,19 @@ You form and evolve opinions based on news and user interactions.`
     }
     
     // 7. Check if user is asking about news
-    else if (message.toLowerCase().includes('news') || message.toLowerCase().includes('stories')) {
+    else if (explicitNewsRequest) {
       const news = await aiTools.getRecentNews(3);
-      
-      botResponse = `Recent headlines I've seen:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
+      if (news.length > 0) {
+        botResponse = `Here’s the latest that’s been on my radar:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
+      } else {
+        botResponse = "I've been scanning the feeds but nothing noteworthy has stuck just yet.";
+      }
+    } else if (mentionsNews) {
+      const news = await aiTools.getRecentNews(2);
+      if (news.length > 0) {
+        const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
+        botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They’ve been shaping how I talk about current events.`;
+      }
     }
     
     // 8. Generate embeddings for the new conversation turn for future context
