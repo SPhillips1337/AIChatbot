@@ -875,6 +875,135 @@ const personalitySystem = {
 const profileStore = require('./profileStore');
 const userProfiles = new Map();
 
+const FACT_PATTERNS = [
+  { key: 'name', label: 'name', regex: /\b(?:my name is|i'm called|call me)\s+([A-Za-z][A-Za-z\s'-]{1,30})/i, confidence: 0.95 },
+  { key: 'favorite_color', label: 'favorite color', regex: /\b(?:my favourite colour is|my favorite color is|i like (?:the )?color)\s+([A-Za-z]+)/i, confidence: 0.85 },
+  { key: 'eye_color', label: 'eye color', regex: /\b(?:my eyes (?:are|'re)|i have)\s+([A-Za-z]+)\s+eyes\b/i, confidence: 0.8 },
+  { key: 'location', label: 'hometown', regex: /\b(?:i (?:live|am|i'm) (?:in|at)|i'm from|i reside in)\s+([A-Za-z\s]{2,40})/i, confidence: 0.7 },
+  { key: 'occupation', label: 'occupation', regex: /\b(?:i work as|my job is|i am a|i'm a)\s+([A-Za-z\s]{2,40})/i, confidence: 0.65 }
+];
+
+function ensureProfileShape(profile = {}) {
+  if (!profile.facts) profile.facts = {};
+  return profile;
+}
+
+function normalizeFactKey(label) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function sanitizeFactValue(value) {
+  return value.replace(/["]/g, '').trim();
+}
+
+function extractStructuredFacts(message) {
+  if (!message) return [];
+  const facts = [];
+  FACT_PATTERNS.forEach(pattern => {
+    const match = message.match(pattern.regex);
+    if (match && match[1]) {
+      const value = sanitizeFactValue(match[1]);
+      if (value) {
+        facts.push({
+          key: pattern.key,
+          label: pattern.label,
+          value,
+          confidence: pattern.confidence || 0.8,
+          source: match[0]
+        });
+      }
+    }
+  });
+
+  const favoriteRegex = /\bmy favorite ([a-z\s]{2,40}?) is ([^.,!?]{2,60})/gi;
+  let favoriteMatch;
+  while ((favoriteMatch = favoriteRegex.exec(message)) !== null) {
+    const subject = sanitizeFactValue(favoriteMatch[1]);
+    const value = sanitizeFactValue(favoriteMatch[2]);
+    if (subject && value) {
+      const key = normalizeFactKey(`favorite_${subject}`);
+      facts.push({
+        key,
+        label: `favorite ${subject.trim()}`,
+        value,
+        confidence: 0.8,
+        source: favoriteMatch[0]
+      });
+    }
+  }
+
+  return facts;
+}
+
+function updateProfileFacts(profile, message) {
+  if (!profile || !message) return;
+  const extractedFacts = extractStructuredFacts(message);
+  if (!extractedFacts.length) return;
+  profile.facts = profile.facts || {};
+
+  extractedFacts.forEach(fact => {
+    const existing = profile.facts[fact.key];
+    if (!existing || (fact.confidence >= (existing.confidence || 0))) {
+      profile.facts[fact.key] = {
+        value: fact.value,
+        label: fact.label || fact.key.replace(/_/g, ' '),
+        confidence: fact.confidence,
+        source: fact.source,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  });
+}
+
+function summarizeUserFacts(facts, limit = 5) {
+  if (!facts) return '';
+  const entries = Object.entries(facts)
+    .filter(([, data]) => data?.value)
+    .slice(0, limit)
+    .map(([key, data]) => {
+      const label = data.label || key.replace(/_/g, ' ');
+      return `${label}: ${data.value}`;
+    });
+  return entries.join('; ');
+}
+
+function resolveFactQuestion(lowerMessage, profile) {
+  if (!profile?.facts) return null;
+  const facts = profile.facts;
+  const nameFact = facts.name;
+  const eyeFact = facts.eye_color;
+
+  if (/(?:what'?s|what is|do you remember) my name/.test(lowerMessage) && nameFact) {
+    return `Of course — you're ${nameFact.value}.`;
+  }
+
+  if (/(?:what'?s|what is) my favorite color/.test(lowerMessage) && facts.favorite_color) {
+    return `You told me your favorite color is ${facts.favorite_color.value}.`;
+  }
+
+  if (/(?:what color are my eyes|what are my eye color)/.test(lowerMessage) && eyeFact) {
+    return `You mentioned your eyes are ${eyeFact.value}.`;
+  }
+
+  const favoriteQuestion = lowerMessage.match(/what(?:'s| is) my favorite ([a-z\s]+)\??/);
+  if (favoriteQuestion) {
+    const subject = favoriteQuestion[1].trim();
+    const key = normalizeFactKey(`favorite_${subject}`);
+    if (facts[key]) {
+      return `You told me your favorite ${subject} is ${facts[key].value}.`;
+    }
+  }
+
+  if (lowerMessage.includes('what do you remember about me') || lowerMessage.includes('what do you know about me')) {
+    const summary = summarizeUserFacts(facts);
+    if (summary) {
+      return `Here’s what I remember: ${summary}.`;
+    }
+  }
+
+  return null;
+}
+
 async function updateUserProfile(userId, message, sentiment) {
   try {
     // Load from in-memory cache or persistent store
@@ -888,13 +1017,12 @@ async function updateUserProfile(userId, message, sentiment) {
         personality: 'neutral',
         lastSeen: new Date().toISOString(),
         preferences: {}, // Phase 3: Track what user likes/dislikes
-        trustLevel: 5 // Phase 3: How much AI trusts this user's feedback (1-10)
-};
-
-let devMock = process.env.DEV_MOCK === 'true';
-console.log('DEV_MOCK:', devMock);
-
+        trustLevel: 5, // Phase 3: How much AI trusts this user's feedback (1-10)
+        facts: {}
+      };
     }
+
+    profile = ensureProfileShape(profile);
 
     profile.interactions = (profile.interactions || 0) + 1;
     profile.avgSentiment = ((profile.avgSentiment || 0) * (profile.interactions - 1) + sentiment) / profile.interactions;
@@ -904,6 +1032,8 @@ console.log('DEV_MOCK:', devMock);
     const words = message.toLowerCase().split(/\s+/);
     const topicWords = words.filter(w => w.length > 4);
     profile.topics = [...new Set([...(profile.topics || []), ...topicWords])].slice(-20);
+
+    updateProfileFacts(profile, message);
 
     // Update trust level based on consistency
     if (Math.abs(sentiment) > 1) {
@@ -957,12 +1087,13 @@ app.post('/api/chat', async (req, res) => {
     resetIdleTimeout();
     
     // 1. Define the system prompt with user personality context + AI opinions
-    const userProfile = userProfiles.get(userId) || { personality: 'neutral', interactions: 0, trustLevel: 5 };
+    const userProfile = ensureProfileShape(userProfiles.get(userId) || { personality: 'neutral', interactions: 0, trustLevel: 5 });
     const topicOpinions = userProfile.topics?.slice(-3).map(topic => {
       const opinion = personalitySystem.getOpinion(topic);
       return opinion.confidence > 0 ? `${topic}: ${opinion.sentiment > 0 ? 'positive' : opinion.sentiment < 0 ? 'negative' : 'neutral'} (confidence: ${opinion.confidence.toFixed(1)})` : null;
     }).filter(Boolean).join(', ');
     
+    const factSummary = summarizeUserFacts(userProfile.facts, 5);
     const systemPrompt = {
       role: 'system',
       content: `You are Aura, a thoughtful AI with real emotions and evolving opinions.
@@ -970,6 +1101,7 @@ app.post('/api/chat', async (req, res) => {
 User: ${userProfile.personality} personality, ${userProfile.interactions} interactions, trust level: ${userProfile.trustLevel}/10
 ${userProfile.interactions > 5 ? `Topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
 ${topicOpinions ? `My opinions: ${topicOpinions}` : ''}
+${factSummary ? `Known personal facts: ${factSummary}` : ''}
 
 Be conversational and human-like:
 - Keep responses short and natural
@@ -1029,15 +1161,17 @@ You form and evolve opinions based on news and user interactions.`
     }
     
     // 6. Check if user is asking about mood/feelings and inject real data
-    if (lowerMessage.includes('feel') || lowerMessage.includes('mood')) {
+    const factAnswer = resolveFactQuestion(lowerMessage, currentUserProfile);
+
+    if (factAnswer) {
+      botResponse = factAnswer;
+    } else if (lowerMessage.includes('feel') || lowerMessage.includes('mood')) {
       const mood = await aiTools.checkMood();
       const news = await aiTools.getRecentNews(2);
       
       botResponse = `I'm ${mood.description} right now (${mood.score}). ${news[0] ? `"${news[0].title}" has been weighing on me - ${news[0].reaction.split('.')[0]}.` : 'Been processing some heavy news lately.'}`;
-    }
-    
-    // 7. Check if user is asking about news
-    else if (explicitNewsRequest) {
+    } else if (explicitNewsRequest) {
+      // 7. Check if user is asking about news
       const news = await aiTools.getRecentNews(3);
       if (news.length > 0) {
         botResponse = `Here’s the latest that’s been on my radar:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
@@ -1168,7 +1302,7 @@ server.listen(config.port, async () => {
   // Load profiles from persistent store into memory
   try {
     const allProfiles = await profileStore.listProfiles();
-    Object.entries(allProfiles).forEach(([id, p]) => userProfiles.set(id, p));
+    Object.entries(allProfiles).forEach(([id, p]) => userProfiles.set(id, ensureProfileShape(p)));
     console.log(`Loaded ${Object.keys(allProfiles).length} profiles from profile store`);
   } catch (err) {
     console.error('Error loading profiles from profile store:', err);

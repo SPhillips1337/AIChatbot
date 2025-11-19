@@ -16,7 +16,7 @@ The proof-of-concept has matured into a production-style hybrid push/pull chat s
 - **Remote AI Models**: The server calls OpenAI-compatible endpoints for `/v1/chat/completions` and `/v1/embeddings` (e.g., Ollama, OpenRouter). A `DEV_MOCK` flag or `/api/admin/dev-mock` toggles canned responses for local testing.
 - **Memory (Qdrant Vector DB)**: Conversations, news context, and thoughts are stored in Qdrant (`@qdrant/js-client-rest`). Embeddings come from the remote endpoint; dev-mock returns deterministic vectors for development.
 - **News Processor & Mood System**: `webhook-api/news-processor.js` ingests RSS feeds, scores sentiment, updates `news-data.json`, and stores embeddings, providing inputs to proactive thoughts and the dashboard.
-- **Profile & Personality Store**: `webhook-api/profileStore.js` persists user/bot traits to `profile.json`; the in-memory `personalitySystem` tracks evolving opinions exposed via `/api/opinions`.
+- **Profile & Personality Store**: `webhook-api/profileStore.js` persists user/bot traits and structured personal facts (name, favorites, attributes) to `profile.json`; the in-memory `personalitySystem` tracks evolving opinions exposed via `/api/opinions`.
 
 ## Phased Development Plan
 
@@ -40,11 +40,12 @@ The proof-of-concept has matured into a production-style hybrid push/pull chat s
 ### Phase 3: Personality & Evolution
 - **Goal**: Create a chatbot that adapts over time and develops a unique personality.
 - **Status Snapshot**:
-    - Profile store (`profileStore.js` + `/api/users`) persists sentiment, trust, topics. **Implemented**
+    - Profile store (`profileStore.js` + `/api/users`) persists sentiment, trust, topics, and structured facts. **Implemented**
     - Personality system tracks evolving opinions exposed via `/api/opinions` and updated by `/api/feedback`. **In Progress**
     - Thought generation consults profiles + news (see `updateUserProfile` + `newsProcessor.generateNewsInfluencedThought`). **In Progress**
     - Admin/dashboard endpoints (`/api/dashboard`, `/api/admin/*`, `/admin`) provide operational visibility and controls. **Implemented**
     - Unified UI origin (`/chat` served by the webhook API). **Implemented**
+    - Structured fact memory extraction (name, favorites, attributes) feeds prompts and direct answers. **In Progress**
 
 ## Next Steps
 - Short-term:
@@ -52,6 +53,7 @@ The proof-of-concept has matured into a production-style hybrid push/pull chat s
     - Harden admin endpoints (add authentication) before exposing toggles in production.
     - Point `LLM_URL` and `EMBEDDING_URL` at a production-capable gateway and verify end-to-end behavior; then disable dev-mock.
 - Medium-term:
+    - Expand structured fact extraction patterns (relationships, projects, multi-user preferences) and add confirmation prompts for low-confidence data.
     - Implement long-term relationship memory and opinion consolidation from news + user interactions.
     - Add automated tests and monitoring for news processing and persistence.
 

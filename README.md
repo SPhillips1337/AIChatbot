@@ -42,6 +42,7 @@ PHPaibot uses a sophisticated architecture with external data integration:
 - **User & Bot Profiles (Implemented)**: `profileStore` persists user interests, sentiment averages, trust level, and conversation topics.
 - **Feedback Loops (In Progress)**: `/api/feedback` lets conversations update the personality system; the dashboard visualizes evolving state.
 - **Opinion Formation (In Progress)**: `/api/opinions` exposes Aura’s topic-level opinions derived from news mood + feedback signals.
+- **Structured Fact Memory (In Progress)**: Conversations extract long-lived facts (name, favorites, attributes) so Aura can remember and reuse them naturally.
 - **Admin / Dev Controls (Implemented)**: `/api/admin/dev-mock`, `/api/admin/reset-mood`, `/api/admin/clear-news`, and the `/admin` dashboard make tuning and testing easier.
 - **Unified UI Origin (Implemented)**: The webhook API now serves `/chat` so the SPA and API share origin and avoid manual query overrides.
 

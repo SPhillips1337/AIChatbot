@@ -108,7 +108,8 @@
     "Real-time WebSocket communication",
     "Automated news processing every 30 minutes",
     "Sentiment analysis and topic extraction",
-    "Runtime dev-mock mode for local testing and admin toggle"
+    "Runtime dev-mock mode for local testing and admin toggle",
+    "Structured fact memory that captures user-specific details (name, favorites, attributes) from conversations"
   ],
   "apiEndpoints": [
     {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface"},
