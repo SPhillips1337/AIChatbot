@@ -307,32 +307,32 @@
     "updated_at": "2025-11-19T21:11:10.571Z"
   },
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 7,
-    "avgSentiment": 0.14285714285714285,
+    "interactions": 16,
+    "avgSentiment": 0.0625,
     "topics": [
-      "discovered",
-      "older",
-      "tropical",
-      "places,",
-      "we've",
-      "visited",
-      "hainan",
-      "south",
-      "china",
-      "once,",
-      "practically",
-      "english",
-      "summertime",
-      "there",
-      "winter.",
-      "honest",
-      "prefer",
-      "relaxing",
-      "friends",
-      "sometimes"
+      "kayaking",
+      "right",
+      "general",
+      "something",
+      "spoilt",
+      "locally",
+      "there's",
+      "several",
+      "places",
+      "based",
+      "devon",
+      "england",
+      "united",
+      "kingdom",
+      "remember",
+      "name?",
+      "that's",
+      "username,",
+      "actual",
+      "stephen"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-20T11:19:33.062Z",
+    "lastSeen": "2025-11-20T12:16:32.357Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -349,9 +349,16 @@
         "confidence": 0.8,
         "source": "my favorite color because it is the color of my eyes",
         "updatedAt": "2025-11-20T11:18:27.739Z"
+      },
+      "favorite_color": {
+        "value": "blue",
+        "label": "favorite color",
+        "confidence": 0.85,
+        "source": "my favorite color is blue",
+        "updatedAt": "2025-11-20T11:27:03.482Z"
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-20T11:19:33.062Z"
+    "updated_at": "2025-11-20T12:16:32.357Z"
   }
 }

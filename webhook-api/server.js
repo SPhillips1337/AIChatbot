@@ -1460,6 +1460,9 @@ app.post('/api/admin/dev-mock', (req, res) => {
 });
 
 // Serve chat UI from the webhook API so UI and API share origin
+app.get('/', (req, res) => {
+  res.redirect('/chat');
+});
 app.get('/chat', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
