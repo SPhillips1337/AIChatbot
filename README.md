@@ -123,6 +123,7 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - The chat UI prompts for a display name + password; the same credentials work across devices, ensuring one continuous profile per person.
 - Passwords are hashed with `crypto.scrypt` + per-user salt before persisting to disk.
 - The `Switch Profile` link in the menu lets you log out locally (clears stored auth info) without affecting server data.
+- Accounts include a `role` (`admin` or `user`). Set admin IDs via `ADMIN_USER_IDS` env (comma-separated user IDs) or edit `accounts.json`. Admins see dashboard + news controls; standard users don’t.
 
 ## News Integration
 

@@ -20,7 +20,17 @@ function load() {
     console.error('Failed to load account store:', err);
     accounts = {};
   }
+
+  // Ensure all accounts have expected shape
+  Object.keys(accounts).forEach(key => {
+    const account = accounts[key];
+    if (!account) return;
+    account.normalizedUsername = account.normalizedUsername || key;
+    account.role = account.role || 'user';
+  });
+
   rebuildIndex();
+  persist(); // persist normalization changes, no-op if unchanged
 }
 
 function rebuildIndex() {
@@ -81,12 +91,14 @@ function createAccount(username, password) {
     userId,
     salt,
     passwordHash,
+    role: 'user',
     created_at: new Date().toISOString()
   };
   persist();
   return {
     userId,
-    username: displayName
+    username: displayName,
+    role: 'user'
   };
 }
 
@@ -111,11 +123,24 @@ function getAccountById(userId) {
 }
 
 function listAccounts() {
-  return Object.values(accounts).map(({ username, userId, created_at }) => ({
+  return Object.values(accounts).map(({ username, userId, created_at, role }) => ({
     username,
     userId,
-    created_at
+    created_at,
+    role: role || 'user'
   }));
+}
+
+function assignRoleByUserId(userId, role = 'user') {
+  const account = getAccountById(userId);
+  if (!account) return false;
+  const normalized = account.normalizedUsername;
+  if (!normalized || !accounts[normalized]) return false;
+  if (account.role === role) return true;
+  account.role = role;
+  accounts[normalized].role = role;
+  persist();
+  return true;
 }
 
 load();
@@ -124,6 +149,7 @@ module.exports = {
   createAccount,
   verifyCredentials,
   getAccountById,
-  listAccounts
+  listAccounts,
+  assignRoleByUserId
 };
 

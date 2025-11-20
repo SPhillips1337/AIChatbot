@@ -378,9 +378,9 @@
         </div>
         <button id="menuToggle" class="menu-toggle" aria-label="Toggle menu">☰</button>
         <div class="menu-links" id="menuLinks">
-            <a id="dashboardLink" href="#" target="_blank">📊 Dashboard</a>
+            <a id="dashboardLink" href="#" target="_blank" data-admin-only>📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
-            <a href="#" onclick="processNews()">📰 News</a>
+            <a href="#" onclick="processNews()" data-admin-only>📰 News</a>
             <a href="#" id="switchProfileLink" class="danger">🔐 Switch Profile</a>
         </div>
     </div>
@@ -421,6 +421,7 @@
         let userId = null;
         let displayName = null;
         let username = null;
+        let userRole = 'user';
 
         function setViewportHeightVar() {
             const vh = window.innerHeight * 0.01;
@@ -442,6 +443,17 @@
             API_BASE = override;
         }
 
+        function updateMenuVisibility() {
+            const adminEls = document.querySelectorAll('[data-admin-only]');
+            adminEls.forEach(el => {
+                if (userRole === 'admin') {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             const chatBox = document.getElementById('chat-box');
             const messageInput = document.getElementById('message-input');
@@ -456,6 +468,7 @@
             if (dashboardLink) {
                 dashboardLink.href = API_BASE + '/admin';
             }
+            updateMenuVisibility();
 
             if (menuToggle && menuLinks) {
                 menuToggle.addEventListener('click', () => {
@@ -632,6 +645,10 @@
         }
 
         async function processNews() {
+            if (userRole !== 'admin') {
+                alert('Only admins can trigger news processing.');
+                return;
+            }
             try {
                 const response = await fetch(`${API_BASE}/api/process-news`, { method: 'POST' });
                 const result = await response.json();
@@ -671,6 +688,8 @@
             userId = null;
             displayName = null;
             username = null;
+            userRole = 'user';
+            updateMenuVisibility();
         }
 
         function ensureIdentity() {
@@ -679,7 +698,9 @@
                 userId = cached.userId;
                 username = cached.username;
                 displayName = cached.displayName || cached.username;
+                userRole = cached.role || 'user';
                 updateGreeting(displayName);
+                updateMenuVisibility();
                 return Promise.resolve();
             }
             return openAuthModal();
@@ -763,13 +784,16 @@
                         const authData = {
                             userId: payload.userId,
                             username: nameVal,
-                            displayName: payload.displayName || nameVal
+                            displayName: payload.displayName || nameVal,
+                            role: payload.role || 'user'
                         };
                         persistAuth(authData);
                         userId = authData.userId;
                         username = authData.username;
                         displayName = authData.displayName;
+                        userRole = authData.role || 'user';
                         updateGreeting(displayName);
+                        updateMenuVisibility();
 
                         cleanup();
                         modal.classList.add('hidden');
@@ -816,6 +840,10 @@
             switchProfileLink.addEventListener('click', async (event) => {
                 event.preventDefault();
                 clearAuth();
+                const menuLinks = document.getElementById('menuLinks');
+                if (menuLinks) {
+                    menuLinks.classList.remove('open');
+                }
                 await openAuthModal();
             });
         }

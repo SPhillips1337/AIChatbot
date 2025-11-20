@@ -39,6 +39,28 @@ const qdrant = new QdrantClient({ url: config.qdrantUrl });
 
 // Initialize News Processor
 const newsProcessor = new NewsProcessor(qdrant, config);
+
+const DEFAULT_ADMIN_USER_IDS = [
+  '2351d788-4fb9-4dcf-88a1-56f63e06f649'
+];
+const ADMIN_USER_IDS = new Set([
+  ...DEFAULT_ADMIN_USER_IDS,
+  ...(process.env.ADMIN_USER_IDS ? process.env.ADMIN_USER_IDS.split(',').map(id => id.trim()) : [])
+].filter(Boolean));
+
+ADMIN_USER_IDS.forEach(id => accountStore.assignRoleByUserId(id, 'admin'));
+
+function ensureAccountRole(account) {
+  if (!account) return 'user';
+  if (ADMIN_USER_IDS.has(account.userId)) {
+    accountStore.assignRoleByUserId(account.userId, 'admin');
+    account.role = 'admin';
+  }
+  if (!account.role) {
+    account.role = 'user';
+  }
+  return account.role;
+}
 // Inject dependencies
 newsProcessor.generateResponse = generateResponse;
 newsProcessor.generateEmbedding = generateEmbeddings;
@@ -765,10 +787,13 @@ app.post('/api/auth/register', (req, res) => {
   const { username, password } = req.body || {};
   try {
     const account = accountStore.createAccount(username, password);
+    const savedAccount = accountStore.getAccountById(account.userId);
+    const role = ensureAccountRole(savedAccount);
     res.json({
       success: true,
-      userId: account.userId,
-      displayName: account.username
+      userId: savedAccount.userId,
+      displayName: savedAccount.username,
+      role
     });
   } catch (error) {
     const status = error.code === 'USER_EXISTS' ? 409 : 400;
@@ -782,10 +807,12 @@ app.post('/api/auth/login', (req, res) => {
   if (!account) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
+  const role = ensureAccountRole(account);
   res.json({
     success: true,
     userId: account.userId,
-    displayName: account.username
+    displayName: account.username,
+    role
   });
 });
 
