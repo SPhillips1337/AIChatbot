@@ -61,6 +61,32 @@ function ensureAccountRole(account) {
   }
   return account.role;
 }
+
+function authenticateRequest(req) {
+  const userId = req.headers['x-user-id'];
+  const token = req.headers['x-auth-token'];
+  if (!userId || !token) return null;
+  const account = accountStore.getAccountById(userId);
+  if (!account) return null;
+  if (!accountStore.verifySessionToken(userId, token)) return null;
+  ensureAccountRole(account);
+  return account;
+}
+
+function requireAuth(options = {}) {
+  const { admin = false } = options;
+  return (req, res, next) => {
+    const account = authenticateRequest(req);
+    if (!account) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    if (admin && account.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin privileges required' });
+    }
+    req.account = account;
+    next();
+  };
+}
 // Inject dependencies
 newsProcessor.generateResponse = generateResponse;
 newsProcessor.generateEmbedding = generateEmbeddings;
@@ -522,7 +548,7 @@ app.post('/api/trigger-thought', (req, res) => {
 
 
 // API endpoint for recent thoughts/activity
-app.get('/api/dashboard', async (req, res) => {
+app.get('/api/dashboard', requireAuth({ admin: true }), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     
@@ -577,7 +603,7 @@ app.get('/api/dashboard', async (req, res) => {
 });
 
 // API endpoint for bulk deleting news entries by filter
-app.delete('/api/news/bulk', async (req, res) => {
+app.delete('/api/news/bulk', requireAuth({ admin: true }), async (req, res) => {
   try {
     const { filter } = req.body;
     
@@ -656,7 +682,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 // API endpoint for deleting news entries
-app.delete('/api/news/:id', async (req, res) => {
+app.delete('/api/news/:id', requireAuth({ admin: true }), async (req, res) => {
   try {
     const pointId = parseInt(req.params.id);
     await qdrant.delete(config.collectionName, {
@@ -670,7 +696,7 @@ app.delete('/api/news/:id', async (req, res) => {
 });
 
 // API endpoint for manual news processing (POST)
-app.post('/api/process-news', async (req, res) => {
+app.post('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
   try {
     console.log('Manual news processing triggered');
     await newsProcessor.processNewsFeeds();
@@ -686,7 +712,7 @@ app.post('/api/process-news', async (req, res) => {
 });
 
 // API endpoint for manual news processing (GET - for browser access)
-app.get('/api/process-news', async (req, res) => {
+app.get('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
   try {
     console.log('Manual news processing triggered via GET');
     await newsProcessor.processNewsFeeds();
@@ -702,7 +728,7 @@ app.get('/api/process-news', async (req, res) => {
 });
 
 // Admin endpoint to reset mood
-app.post('/api/admin/reset-mood', async (req, res) => {
+app.post('/api/admin/reset-mood', requireAuth({ admin: true }), async (req, res) => {
   try {
     newsProcessor.moodState = { score: 0, topics: [] };
     newsProcessor.saveMoodState();
@@ -728,7 +754,7 @@ app.post('/api/admin/reset-mood', async (req, res) => {
 });
 
 // Admin endpoint to clear news entries (deletes news points from Qdrant and resets mood file)
-app.post('/api/admin/clear-news', async (req, res) => {
+app.post('/api/admin/clear-news', requireAuth({ admin: true }), async (req, res) => {
   try {
     const limit = parseInt(req.body.limit) || 1000;
     const results = await qdrant.scroll(config.collectionName, {
@@ -789,11 +815,13 @@ app.post('/api/auth/register', (req, res) => {
     const account = accountStore.createAccount(username, password);
     const savedAccount = accountStore.getAccountById(account.userId);
     const role = ensureAccountRole(savedAccount);
+    const token = account.token || accountStore.issueSessionToken(savedAccount.userId);
     res.json({
       success: true,
       userId: savedAccount.userId,
       displayName: savedAccount.username,
-      role
+      role,
+      token
     });
   } catch (error) {
     const status = error.code === 'USER_EXISTS' ? 409 : 400;
@@ -808,11 +836,13 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
   const role = ensureAccountRole(account);
+  const token = accountStore.issueSessionToken(account.userId);
   res.json({
     success: true,
     userId: account.userId,
     displayName: account.username,
-    role
+    role,
+    token
   });
 });
 
@@ -1258,6 +1288,11 @@ app.post('/api/chat', async (req, res) => {
     if (!account) {
       return res.status(401).json({ error: 'Unknown user account. Please log out and log back in.' });
     }
+    const authedAccount = authenticateRequest(req);
+    if (!authedAccount || authedAccount.userId !== userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const role = ensureAccountRole(authedAccount);
 
     const lowerMessage = message.toLowerCase();
     // Reset the idle timer on every user interaction
@@ -1426,7 +1461,7 @@ app.get('/api/thoughts/:userId', (req, res) => {
 });
 
 // Enhanced dashboard with Phase 3 data
-app.get('/api/evolution', async (req, res) => {
+app.get('/api/evolution', requireAuth({ admin: true }), async (req, res) => {
   const opinions = {};
   personalitySystem.opinions.forEach((opinion, topic) => {
     opinions[topic] = {
@@ -1466,15 +1501,30 @@ app.get('/api/evolution', async (req, res) => {
 // Serve dashboard UI from the main server at /admin
 // This serves the repository's dashboard.html so the admin UI is available
 app.get('/admin', (req, res) => {
+  const { userId, token } = req.query;
+  if (!userId || !token) {
+    return res.status(401).send('Authentication required');
+  }
+  if (!accountStore.verifySessionToken(userId, token)) {
+    return res.status(401).send('Invalid session');
+  }
+  const account = accountStore.getAccountById(userId);
+  if (!account) {
+    return res.status(401).send('Unknown user');
+  }
+  ensureAccountRole(account);
+  if (account.role !== 'admin') {
+    return res.status(403).send('Admin access required');
+  }
   res.sendFile(path.join(__dirname, '..', 'dashboard.html'));
 });
 
 // Admin endpoints to get/set dev-mock flag
-app.get('/api/admin/dev-mock', (req, res) => {
+app.get('/api/admin/dev-mock', requireAuth({ admin: true }), (req, res) => {
   res.json({ devMock });
 });
 
-app.post('/api/admin/dev-mock', (req, res) => {
+app.post('/api/admin/dev-mock', requireAuth({ admin: true }), (req, res) => {
   try {
     const enabled = !!req.body.enabled;
     devMock = enabled;

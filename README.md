@@ -125,6 +125,12 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - The `Switch Profile` link in the menu lets you log out locally (clears stored auth info) without affecting server data.
 - Accounts include a `role` (`admin` or `user`). Set admin IDs via `ADMIN_USER_IDS` env (comma-separated user IDs) or edit `accounts.json`. Admins see dashboard + news controls; standard users don’t.
 
+### UI Boot & Access Flow
+
+- Visiting `/` immediately redirects to `/chat`, but the SPA now waits for a valid `{userId, token}` session before opening WebSockets or sending `/api/chat` requests. If you see the loading spinner persist, complete the login/register modal once so the UI can proceed.
+- `/chat` and the websocket connection share the webhook API’s origin, so tokens stored in `localStorage` are automatically attached to subsequent requests.
+- Admin-level APIs (e.g., `/admin`, `/api/process-news`, `/api/admin/*`, `/api/news/*`) enforce the `X-User-Id` / `X-Auth-Token` headers issued during login and will reject access attempts from unauthenticated or non-admin identities.
+
 ## News Integration
 
 The system automatically processes news feeds every 30 minutes:

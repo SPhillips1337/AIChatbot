@@ -21,16 +21,28 @@ function load() {
     accounts = {};
   }
 
-  // Ensure all accounts have expected shape
+  let changed = false;
   Object.keys(accounts).forEach(key => {
     const account = accounts[key];
     if (!account) return;
-    account.normalizedUsername = account.normalizedUsername || key;
-    account.role = account.role || 'user';
+    if (!account.normalizedUsername) {
+      account.normalizedUsername = key;
+      changed = true;
+    }
+    if (!account.role) {
+      account.role = 'user';
+      changed = true;
+    }
+    if (!account.sessionToken) {
+      account.sessionToken = generateSessionToken();
+      changed = true;
+    }
   });
 
   rebuildIndex();
-  persist(); // persist normalization changes, no-op if unchanged
+  if (changed) {
+    persist();
+  }
 }
 
 function rebuildIndex() {
@@ -60,6 +72,10 @@ function generateUserId() {
   return `user_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
+function generateSessionToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -84,6 +100,7 @@ function createAccount(username, password) {
   const passwordHash = hashPassword(password, salt);
   const userId = generateUserId();
   const displayName = username.trim();
+  const sessionToken = generateSessionToken();
 
   accounts[normalized] = {
     username: displayName,
@@ -91,6 +108,7 @@ function createAccount(username, password) {
     userId,
     salt,
     passwordHash,
+    sessionToken,
     role: 'user',
     created_at: new Date().toISOString()
   };
@@ -98,7 +116,8 @@ function createAccount(username, password) {
   return {
     userId,
     username: displayName,
-    role: 'user'
+    role: 'user',
+    token: sessionToken
   };
 }
 
@@ -116,6 +135,25 @@ function verifyCredentials(username, password) {
     console.error('Error verifying credentials:', err.message);
   }
   return null;
+}
+
+function issueSessionToken(userId) {
+  const account = getAccountById(userId);
+  if (!account) return null;
+  const normalized = account.normalizedUsername;
+  if (!normalized || !accounts[normalized]) return null;
+  const token = generateSessionToken();
+  account.sessionToken = token;
+  accounts[normalized].sessionToken = token;
+  persist();
+  return token;
+}
+
+function verifySessionToken(userId, token) {
+  if (!userId || !token) return false;
+  const account = getAccountById(userId);
+  if (!account || !account.sessionToken) return false;
+  return account.sessionToken === token;
 }
 
 function getAccountById(userId) {
@@ -150,6 +188,8 @@ module.exports = {
   verifyCredentials,
   getAccountById,
   listAccounts,
-  assignRoleByUserId
+  assignRoleByUserId,
+  issueSessionToken,
+  verifySessionToken
 };
 

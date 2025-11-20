@@ -175,9 +175,25 @@
             API_BASE = override;
         }
 
+        const sessionUserId = params.get('userId');
+        const sessionToken = params.get('token');
+        if (!sessionUserId || !sessionToken) {
+            document.body.innerHTML = '<p style="color:red;text-align:center;margin-top:40px;">Authentication required. Please open the dashboard from the chat UI.</p>';
+            throw new Error('Missing authentication credentials');
+        }
+
+        function authedFetch(path, options = {}) {
+            const headers = {
+                ...(options.headers || {}),
+                'X-User-Id': sessionUserId,
+                'X-Auth-Token': sessionToken
+            };
+            return fetch(`${API_BASE}${path}`, { ...options, headers });
+        }
+
         async function loadDashboard() {
             try {
-                const response = await fetch(`${API_BASE}/api/dashboard`);
+                const response = await authedFetch(`/api/dashboard`);
                 const data = await response.json();
                 
                 // Update mood info
@@ -249,7 +265,7 @@
             if (!confirm('Delete this news entry?')) return;
             
             try {
-                const response = await fetch(`${API_BASE}/api/news/${newsId}`, {
+                const response = await authedFetch(`/api/news/${newsId}`, {
                     method: 'DELETE'
                 });
                 
@@ -269,7 +285,7 @@
         async function bulkDeleteWolfram() {
             if (!confirm('Delete all Wolfram Alpha entries? This cannot be undone.')) return;
             try {
-                const response = await fetch(`${API_BASE}/api/news/bulk`, {
+                const response = await authedFetch(`/api/news/bulk`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filter: 'Wolfram' })
@@ -291,7 +307,7 @@
         async function resetMood() {
             if (!confirm('Reset AI mood to neutral?')) return;
             try {
-                const response = await fetch(`${API_BASE}/api/admin/reset-mood`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                const response = await authedFetch(`/api/admin/reset-mood`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
                 const result = await response.json();
                 if (response.ok) {
                     alert('Mood reset successfully');
@@ -315,7 +331,7 @@
 
         async function clearNews(limit = 100) {
             try {
-                const response = await fetch(`${API_BASE}/api/admin/clear-news`, {
+                const response = await authedFetch(`/api/admin/clear-news`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ limit })
@@ -336,7 +352,7 @@
         // Admin dev-mock functions
         async function getDevMockStatus() {
             try {
-                const res = await fetch(`${API_BASE}/api/admin/dev-mock`);
+                const res = await authedFetch(`/api/admin/dev-mock`);
                 if (!res.ok) return updateDevMockUI(null);
                 const body = await res.json();
                 updateDevMockUI(!!body.devMock);
@@ -368,10 +384,10 @@
 
         async function toggleDevMockUI() {
             try {
-                const currentResponse = await fetch(`${API_BASE}/api/admin/dev-mock`);
+                const currentResponse = await authedFetch(`/api/admin/dev-mock`);
                 const data = currentResponse.ok ? await currentResponse.json() : { devMock: false };
                 const newState = !data.devMock;
-                const res = await fetch(`${API_BASE}/api/admin/dev-mock`, {
+                const res = await authedFetch(`/api/admin/dev-mock`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled: newState })

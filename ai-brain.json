@@ -111,14 +111,17 @@
     "Runtime dev-mock mode for local testing and admin toggle",
     "Structured fact memory that captures user-specific details (name, favorites, attributes) from conversations",
     "Password-protected profiles that sync identities across devices",
-    "Role-aware UI (admin vs user) with gated controls"
+    "Role-aware UI (admin vs user) with gated controls",
+    "Authenticated UI boot flow that waits for a valid session before enabling `/`/`/chat` interactions"
   ],
   "apiEndpoints": [
-    {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface"},
+    {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface (requires user session headers)"},
     {"endpoint": "/api/mood", "method": "GET", "description": "Check AI emotional state and topics"},
-    {"endpoint": "/api/process-news", "method": "GET/POST", "description": "Trigger manual news processing"},
-    {"endpoint": "/api/admin/dev-mock", "method": "GET/POST", "description": "View and toggle development mock mode"},
+    {"endpoint": "/api/process-news", "method": "GET/POST", "description": "Trigger manual news processing (admin headers required)"},
+    {"endpoint": "/api/admin/dev-mock", "method": "GET/POST", "description": "View and toggle development mock mode (admin only)"},
     {"endpoint": "/api/users/:userId/profile", "method": "GET", "description": "Retrieve user profile"},
+    {"endpoint": "/admin", "method": "GET", "description": "Serve admin dashboard to authenticated admins"},
+    {"endpoint": "/", "method": "GET", "description": "Redirects to `/chat` once authentication completes"},
     {"endpoint": "/chat", "method": "GET", "description": "Serve chat UI from webhook API (same origin)"}
   ],
   "nextSteps": [
@@ -142,7 +145,11 @@
       "PORT (optional)",
       "DEV_MOCK (optional)"
     ],
+    "authentication": {
+      "description": "`/` and `/chat` wait for a valid session (userId + token) before opening WebSockets or hitting `/api/chat`, and every admin endpoint (`/api/process-news`, `/api/admin/*`, `/admin`) rejects requests without `X-User-Id`/`X-Auth-Token`.",
+      "notes": "Ensure the client stores the session from `/api/auth/login` or `/api/auth/register` so the UI can complete its boot sequence. Admin dashboards rely on the same token via query params to `/admin`."
+    },
     "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock."
   },
-  "lastUpdated": "2025-11-18T12:50:00Z"
+  "lastUpdated": "2025-11-20T15:00:00Z"
 }

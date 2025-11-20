@@ -1,40 +1,40 @@
 {
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 18,
-    "avgSentiment": 0.05555555555555555,
+    "interactions": 21,
+    "avgSentiment": 0.047619047619047616,
     "topics": [
-      "based",
-      "devon",
-      "england",
-      "united",
-      "kingdom",
-      "remember",
-      "name?",
-      "that's",
-      "username,",
-      "actual",
-      "stephen",
-      "speckit",
-      "framework",
-      "/speckit.constitution",
-      "establish",
+      "abandoned",
+      "approach",
+      "blockers",
+      "ubuntu",
+      "development",
+      "machine",
+      "return",
+      "future",
+      "other",
+      "developers",
+      "would",
+      "creating",
       "project",
-      "principles",
-      "wordpress",
-      "builder",
-      "called"
+      "effective",
+      "because",
+      "dubious",
+      "about",
+      "useful",
+      "world",
+      "situation"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-20T12:36:00.933Z",
+    "lastSeen": "2025-11-20T16:46:58.604Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
       "name": {
-        "value": "Stephen",
+        "value": "info@happymonkey.ai",
         "label": "name",
         "confidence": 0.99,
         "source": "user_display_name",
-        "updatedAt": "2025-11-20T11:14:05.237Z"
+        "updatedAt": "2025-11-20T16:43:21.991Z"
       },
       "favorite_color_because_it": {
         "value": "the color of my eyes",
@@ -52,6 +52,6 @@
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-20T12:36:00.933Z"
+    "updated_at": "2025-11-20T16:46:58.604Z"
   }
 }

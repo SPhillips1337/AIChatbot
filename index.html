@@ -422,6 +422,7 @@
         let displayName = null;
         let username = null;
         let userRole = 'user';
+        let authToken = null;
 
         function setViewportHeightVar() {
             const vh = window.innerHeight * 0.01;
@@ -430,6 +431,17 @@
         setViewportHeightVar();
         window.addEventListener('resize', setViewportHeightVar);
         window.addEventListener('orientationchange', setViewportHeightVar);
+
+        function updateMenuVisibility() {
+            const adminEls = document.querySelectorAll('[data-admin-only]');
+            adminEls.forEach(el => {
+                if (userRole === 'admin') {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
 
         // Determine API base. If opened via file:// or hostname is empty, default to localhost:4002
         const detectedBase = (window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : ''));
@@ -466,8 +478,24 @@
             let isTyping = false;
 
             if (dashboardLink) {
-                dashboardLink.href = API_BASE + '/admin';
+                dashboardLink.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (userRole !== 'admin') {
+                        alert('Dashboard access is limited to admins.');
+                        return;
+                    }
+                    if (!userId || !authToken) {
+                        alert('Please log in again to access the dashboard.');
+                        return;
+                    }
+                    const params = new URLSearchParams({
+                        userId,
+                        token: authToken
+                    });
+                    window.open(`${API_BASE}/admin?${params.toString()}`, '_blank');
+                });
             }
+            updateMenuVisibility();
             updateMenuVisibility();
 
             if (menuToggle && menuLinks) {
@@ -570,6 +598,8 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            'X-User-Id': userId,
+                            'X-Auth-Token': authToken || ''
                         },
                         body: JSON.stringify({
                             message: message,
@@ -650,7 +680,14 @@
                 return;
             }
             try {
-                const response = await fetch(`${API_BASE}/api/process-news`, { method: 'POST' });
+                const response = await fetch(`${API_BASE}/api/process-news`, { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': userId,
+                        'X-Auth-Token': authToken || ''
+                    }
+                });
                 const result = await response.json();
                 alert(`News processed! New mood: ${result.mood.score}`);
             } catch (error) {
@@ -689,20 +726,23 @@
             displayName = null;
             username = null;
             userRole = 'user';
+            authToken = null;
             updateMenuVisibility();
         }
 
         function ensureIdentity() {
             const cached = loadAuthFromStorage();
-            if (cached?.userId && cached?.username) {
+            if (cached?.userId && cached?.username && cached?.token) {
                 userId = cached.userId;
                 username = cached.username;
                 displayName = cached.displayName || cached.username;
                 userRole = cached.role || 'user';
+                authToken = cached.token || null;
                 updateGreeting(displayName);
                 updateMenuVisibility();
                 return Promise.resolve();
             }
+            clearAuth();
             return openAuthModal();
         }
 
@@ -785,13 +825,15 @@
                             userId: payload.userId,
                             username: nameVal,
                             displayName: payload.displayName || nameVal,
-                            role: payload.role || 'user'
+                            role: payload.role || 'user',
+                            token: payload.token
                         };
                         persistAuth(authData);
                         userId = authData.userId;
                         username = authData.username;
                         displayName = authData.displayName;
                         userRole = authData.role || 'user';
+                        authToken = authData.token || null;
                         updateGreeting(displayName);
                         updateMenuVisibility();
 
