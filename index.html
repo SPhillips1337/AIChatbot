@@ -150,6 +150,9 @@
             display: flex;
             padding: 15px;
             background-color: #f8f9fa;
+            width: 100%;
+            box-sizing: border-box;
+            gap: 10px;
         }
         #message-input {
             flex-grow: 1;
@@ -158,6 +161,9 @@
             padding: 10px 15px;
             font-size: 1em;
             outline: none;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         #message-input:focus {
             border-color: #007bff;
@@ -221,11 +227,13 @@
         }
         .modal-content input {
             width: 100%;
+            max-width: 100%;
             padding: 12px 14px;
             border-radius: 8px;
             border: 1px solid #d0d0d0;
             font-size: 1em;
             margin: 15px 0;
+            box-sizing: border-box;
         }
         .modal-content button {
             width: 100%;
