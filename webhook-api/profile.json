@@ -307,18 +307,9 @@
     "updated_at": "2025-11-19T21:11:10.571Z"
   },
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 16,
-    "avgSentiment": 0.0625,
+    "interactions": 18,
+    "avgSentiment": 0.05555555555555555,
     "topics": [
-      "kayaking",
-      "right",
-      "general",
-      "something",
-      "spoilt",
-      "locally",
-      "there's",
-      "several",
-      "places",
       "based",
       "devon",
       "england",
@@ -329,10 +320,19 @@
       "that's",
       "username,",
       "actual",
-      "stephen"
+      "stephen",
+      "speckit",
+      "framework",
+      "/speckit.constitution",
+      "establish",
+      "project",
+      "principles",
+      "wordpress",
+      "builder",
+      "called"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-20T12:16:32.357Z",
+    "lastSeen": "2025-11-20T12:36:00.933Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -359,6 +359,6 @@
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-20T12:16:32.357Z"
+    "updated_at": "2025-11-20T12:36:00.933Z"
   }
 }
