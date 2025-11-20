@@ -1,3 +1,5 @@
+Legacy Note: This document captures an early AIML/PHP concept from before the project moved to the Node.js + Qdrant architecture that now powers Aura (see `README.md`). Keep for reference only; the steps below are not part of the current build plan.
+
 1. **Theme-based AIML file**: Focus on a specific theme or domain (e.g., healthcare, finance, education, etc.) to create an AIML file with 5,000-10,000 responses.
 2. **Core knowledge base**: Create a foundation of general knowledge and common topics (e.g., history, science, literature, etc.) to serve as a starting point for future expansion.
 

@@ -36,9 +36,15 @@
             padding: 5px 10px;
             border-radius: 4px;
             transition: background 0.2s;
+            border: 1px solid transparent;
         }
         .menu-links a:hover {
             background: rgba(255,255,255,0.2);
+            border-color: rgba(255,255,255,0.35);
+        }
+        .menu-links a.danger {
+            background: rgba(255, 68, 68, 0.2);
+            border-color: rgba(255, 68, 68, 0.5);
         }
         .chat-wrapper {
             flex: 1;
@@ -189,6 +195,12 @@
             margin: 15px 0;
         }
         .modal-content button {
+        .modal-content button {
+        .modal-content button {
+        .modal-content button {
+        .modal-content button {
+        .modal-content button {
+        .modal-content button {
             width: 100%;
             padding: 12px;
             border-radius: 8px;
@@ -208,19 +220,53 @@
         .shake {
             animation: input-shake 0.3s;
         }
+        .auth-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .auth-tab {
+            flex: 1;
+            border: 1px solid #d0d0d0;
+            background: #f5f5f5;
+            border-radius: 6px;
+            padding: 8px;
+            cursor: pointer;
+            transition: background 0.2s, border 0.2s;
+        }
+        .auth-tab.active {
+            background: #007bff;
+            color: #fff;
+            border-color: #007bff;
+        }
+        .auth-error {
+            color: #dc3545;
+            margin-top: 8px;
+            font-size: 0.9em;
+        }
+        .password-hint {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: -10px;
+        }
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
 
     <div class="menu-bar">
         <div style="display:flex;align-items:center;gap:10px;">
-            <h1 style="margin:0;">PHPaibot - AI Chat</h1>
+            <h1 style="margin:0;">AURA.ai Chatbot - AI Chat</h1>
             <span id="user-greeting"></span>
         </div>
         <div class="menu-links">
             <a id="dashboardLink" href="#" target="_blank">📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
             <a href="#" onclick="processNews()">📰 News</a>
+            <a href="#" id="switchProfileLink" class="danger">🔐 Switch Profile</a>
         </div>
     </div>
 
@@ -235,24 +281,31 @@
         </div>
     </div>
 
-    <div id="identity-modal" class="modal-overlay hidden">
+    <div id="auth-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2>Welcome!</h2>
-            <p>What should Aura call you?</p>
-            <input type="text" id="display-name-input" placeholder="Enter your name" autocomplete="name">
-            <button id="save-identity">Start chatting</button>
-            <small style="display:block;margin-top:10px;color:#666;">We'll remember this on this device so Aura can greet you properly.</small>
+            <p style="margin-bottom:15px;">Log in or create a profile to keep Aura’s memory in sync across devices.</p>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-mode="login">Login</button>
+                <button class="auth-tab" data-mode="register">Create Profile</button>
+            </div>
+            <input type="text" id="auth-username" placeholder="Display name" autocomplete="username">
+            <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+            <input type="password" id="auth-password-confirm" class="hidden" placeholder="Confirm password" autocomplete="new-password">
+            <small class="password-hint hidden" id="password-hint">Password must be at least 6 characters.</small>
+            <button id="auth-submit">Continue</button>
+            <p class="auth-error hidden" id="auth-error"></p>
         </div>
     </div>
 
     <script>
         const STORAGE_KEYS = {
-            userId: 'phpaibot_user_id',
-            displayName: 'phpaibot_display_name'
+            auth: 'phpaibot_auth_v1'
         };
-
+        const LEGACY_KEYS = ['phpaibot_user_id', 'phpaibot_display_name'];
         let userId = null;
         let displayName = null;
+        let username = null;
 
         // Determine API base. If opened via file:// or hostname is empty, default to localhost:4002
         const detectedBase = (window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : ''));
@@ -279,6 +332,7 @@
                 dashboardLink.href = API_BASE + '/admin';
             }
 
+            cleanupLegacyIdentity();
             await ensureIdentity();
             updateGreeting(displayName);
 
@@ -454,59 +508,176 @@
             greetingEl.textContent = name ? `👤 ${name}` : '👤 Guest';
         }
 
-        function generateUserId() {
-            if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-            return `user_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        function cleanupLegacyIdentity() {
+            LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
+        }
+
+        function loadAuthFromStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEYS.auth);
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (err) {
+                console.warn('Failed to parse auth cache', err);
+                return null;
+            }
+        }
+
+        function persistAuth(auth) {
+            localStorage.setItem(STORAGE_KEYS.auth, JSON.stringify(auth));
+        }
+
+        function clearAuth() {
+            localStorage.removeItem(STORAGE_KEYS.auth);
+            userId = null;
+            displayName = null;
+            username = null;
         }
 
         function ensureIdentity() {
-            userId = localStorage.getItem(STORAGE_KEYS.userId);
-            if (!userId) {
-                userId = generateUserId();
-                localStorage.setItem(STORAGE_KEYS.userId, userId);
-            }
-
-            displayName = localStorage.getItem(STORAGE_KEYS.displayName);
-            if (displayName) {
+            const cached = loadAuthFromStorage();
+            if (cached?.userId && cached?.username) {
+                userId = cached.userId;
+                username = cached.username;
+                displayName = cached.displayName || cached.username;
                 updateGreeting(displayName);
                 return Promise.resolve();
             }
+            return openAuthModal();
+        }
 
+        function openAuthModal() {
             return new Promise(resolve => {
-                const modal = document.getElementById('identity-modal');
-                const nameInput = document.getElementById('display-name-input');
-                const saveBtn = document.getElementById('save-identity');
-                modal.classList.remove('hidden');
-                setTimeout(() => nameInput.focus(), 100);
+                const modal = document.getElementById('auth-modal');
+                const tabs = Array.from(document.querySelectorAll('.auth-tab'));
+                const usernameInput = document.getElementById('auth-username');
+                const passwordInput = document.getElementById('auth-password');
+                const confirmInput = document.getElementById('auth-password-confirm');
+                const submitBtn = document.getElementById('auth-submit');
+                const errorEl = document.getElementById('auth-error');
+                const passwordHint = document.getElementById('password-hint');
+                let mode = 'login';
 
-                const saveHandler = () => {
-                    const value = nameInput.value.trim();
-                    if (!value) {
-                        nameInput.classList.add('shake');
-                        setTimeout(() => nameInput.classList.remove('shake'), 400);
+                modal.classList.remove('hidden');
+                setTimeout(() => usernameInput.focus(), 100);
+
+                function setMode(newMode) {
+                    mode = newMode;
+                    tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
+                    if (mode === 'register') {
+                        confirmInput.classList.remove('hidden');
+                        passwordHint.classList.remove('hidden');
+                        passwordInput.setAttribute('autocomplete', 'new-password');
+                    } else {
+                        confirmInput.classList.add('hidden');
+                        passwordHint.classList.add('hidden');
+                        passwordInput.setAttribute('autocomplete', 'current-password');
+                    }
+                    errorEl.classList.add('hidden');
+                    errorEl.textContent = '';
+                }
+
+                const tabHandlers = new Map();
+                tabs.forEach(tab => {
+                    const handler = () => setMode(tab.dataset.mode);
+                    tab.addEventListener('click', handler);
+                    tabHandlers.set(tab, handler);
+                });
+
+                async function handleSubmit() {
+                    const nameVal = usernameInput.value.trim();
+                    const passVal = passwordInput.value.trim();
+                    const confirmVal = confirmInput.value.trim();
+                    if (!nameVal || !passVal) {
+                        errorEl.textContent = 'Name and password are required.';
+                        errorEl.classList.remove('hidden');
                         return;
                     }
-                    displayName = value;
-                    localStorage.setItem(STORAGE_KEYS.displayName, displayName);
-                    modal.classList.add('hidden');
-                    updateGreeting(displayName);
-                    cleanup();
-                    resolve();
-                };
-
-                const keyHandler = (event) => {
-                    if (event.key === 'Enter') {
-                        saveHandler();
+                    if (mode === 'register') {
+                        if (passVal.length < 6) {
+                            errorEl.textContent = 'Password must be at least 6 characters.';
+                            errorEl.classList.remove('hidden');
+                            return;
+                        }
+                        if (passVal !== confirmVal) {
+                            errorEl.textContent = 'Passwords do not match.';
+                            errorEl.classList.remove('hidden');
+                            return;
+                        }
                     }
-                };
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = mode === 'register' ? 'Creating...' : 'Signing in...';
+                    errorEl.classList.add('hidden');
+                    errorEl.textContent = '';
 
-                const cleanup = () => {
-                    saveBtn.removeEventListener('click', saveHandler);
-                    nameInput.removeEventListener('keypress', keyHandler);
-                };
+                    try {
+                        const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
+                        const response = await fetch(`${API_BASE}${endpoint}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: nameVal, password: passVal })
+                        });
+                        const payload = await response.json();
+                        if (!response.ok) {
+                            throw new Error(payload.error || 'Authentication failed');
+                        }
+                        const authData = {
+                            userId: payload.userId,
+                            username: nameVal,
+                            displayName: payload.displayName || nameVal
+                        };
+                        persistAuth(authData);
+                        userId = authData.userId;
+                        username = authData.username;
+                        displayName = authData.displayName;
+                        updateGreeting(displayName);
 
-                saveBtn.addEventListener('click', saveHandler);
-                nameInput.addEventListener('keypress', keyHandler);
+                        cleanup();
+                        modal.classList.add('hidden');
+                        resolve();
+                    } catch (error) {
+                        errorEl.textContent = error.message;
+                        errorEl.classList.remove('hidden');
+                    } finally {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Continue';
+                    }
+                }
+
+                function handleKey(event) {
+                    if (event.key === 'Enter') {
+                        handleSubmit();
+                    }
+                }
+
+                function cleanup() {
+                    submitBtn.removeEventListener('click', handleSubmit);
+                    usernameInput.removeEventListener('keypress', handleKey);
+                    passwordInput.removeEventListener('keypress', handleKey);
+                    confirmInput.removeEventListener('keypress', handleKey);
+                    tabHandlers.forEach((handler, tab) => tab.removeEventListener('click', handler));
+                    usernameInput.value = '';
+                    passwordInput.value = '';
+                    confirmInput.value = '';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Continue';
+                }
+
+                submitBtn.addEventListener('click', handleSubmit);
+                usernameInput.addEventListener('keypress', handleKey);
+                passwordInput.addEventListener('keypress', handleKey);
+                confirmInput.addEventListener('keypress', handleKey);
+
+                setMode(mode);
+            });
+        }
+
+        const switchProfileLink = document.getElementById('switchProfileLink');
+        if (switchProfileLink) {
+            switchProfileLink.addEventListener('click', async (event) => {
+                event.preventDefault();
+                clearAuth();
+                await openAuthModal();
             });
         }
     </script>

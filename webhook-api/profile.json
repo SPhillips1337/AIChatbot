@@ -224,5 +224,134 @@
     },
     "displayName": "Stephen",
     "updated_at": "2025-11-19T17:23:46.491Z"
+  },
+  "743547d0-92de-4d16-8b85-26870ccd75e8": {
+    "interactions": 20,
+    "avgSentiment": 0.1,
+    "topics": [
+      "farms",
+      "things",
+      "seems",
+      "result",
+      "fresher",
+      "organic",
+      "produce",
+      "priced",
+      "processed",
+      "ntional",
+      "trust",
+      "member,",
+      "enjoyed",
+      "walking",
+      "round",
+      "various",
+      "parks",
+      "estates",
+      "cornwall",
+      "locally"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-19T21:27:55.804Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "facts": {
+      "name": {
+        "value": "Stephen",
+        "label": "name",
+        "confidence": 0.99,
+        "source": "user_display_name",
+        "updatedAt": "2025-11-19T21:04:54.305Z"
+      },
+      "favorite_color": {
+        "value": "blue",
+        "label": "favorite color",
+        "confidence": 0.85,
+        "source": "My favourite colour is blue",
+        "updatedAt": "2025-11-19T21:13:46.105Z"
+      },
+      "occupation": {
+        "value": "software engineer",
+        "label": "occupation",
+        "confidence": 0.65,
+        "source": "I am a software engineer",
+        "updatedAt": "2025-11-19T21:16:39.781Z"
+      }
+    },
+    "displayName": "Stephen",
+    "updated_at": "2025-11-19T21:27:55.804Z"
+  },
+  "4109c790-bd3d-4c7d-a1b4-882fadd821cd": {
+    "interactions": 5,
+    "avgSentiment": 0,
+    "topics": [
+      "pirate",
+      "future?",
+      "colour",
+      "brine",
+      "matey"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-19T21:11:10.571Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "facts": {
+      "name": {
+        "value": "Stephen",
+        "label": "name",
+        "confidence": 0.99,
+        "source": "user_display_name",
+        "updatedAt": "2025-11-19T21:09:13.714Z"
+      }
+    },
+    "displayName": "Stephen",
+    "updated_at": "2025-11-19T21:11:10.571Z"
+  },
+  "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
+    "interactions": 7,
+    "avgSentiment": 0.14285714285714285,
+    "topics": [
+      "discovered",
+      "older",
+      "tropical",
+      "places,",
+      "we've",
+      "visited",
+      "hainan",
+      "south",
+      "china",
+      "once,",
+      "practically",
+      "english",
+      "summertime",
+      "there",
+      "winter.",
+      "honest",
+      "prefer",
+      "relaxing",
+      "friends",
+      "sometimes"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-20T11:19:33.062Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "facts": {
+      "name": {
+        "value": "info@happymonkey.ai",
+        "label": "name",
+        "confidence": 0.99,
+        "source": "user_display_name",
+        "updatedAt": "2025-11-20T11:14:05.237Z"
+      },
+      "favorite_color_because_it": {
+        "value": "the color of my eyes",
+        "label": "favorite color because it",
+        "confidence": 0.8,
+        "source": "my favorite color because it is the color of my eyes",
+        "updatedAt": "2025-11-20T11:18:27.739Z"
+      }
+    },
+    "displayName": "info@happymonkey.ai",
+    "updated_at": "2025-11-20T11:19:33.062Z"
   }
 }

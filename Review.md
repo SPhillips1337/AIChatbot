@@ -1,3 +1,6 @@
+> **Status:** Historical document  
+> This file summarizes the early PHP/AIML prototype that predated the current Node.js/WebSocket architecture described in `README.md`. Keep it for archival context only—the implementation details, file names, and next steps below no longer reflect the live system.
+
 After reviewing the code, here's a summary of the project's state:
 
   Core Idea: The project aims to create a PHP chatbot that can initiate conversations by generating "random thoughts." This is a departure from the typical reactive nature of chatbots.

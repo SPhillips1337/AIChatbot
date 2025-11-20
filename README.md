@@ -1,12 +1,12 @@
-# PHPaibot - A Thinking Chatbot
+# AURA.ai Chatbot - A Thinking Chatbot
 
-PHPaibot is a proactive PHP chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality. Unlike traditional chatbots that only respond to user inputs, PHPaibot can initiate conversations with dynamically generated thoughts based on previous interactions and current events.
+AURA.ai Chatbot is a proactive chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality. Unlike traditional chatbots that only respond to user inputs, AURA.ai Chatbot can initiate conversations with dynamically generated thoughts based on previous interactions and current events.
 
 This project demonstrates a hybrid push/pull chat system with news-aware AI personality and emotional state tracking.
 
 ## Architecture
 
-PHPaibot uses a sophisticated architecture with external data integration:
+AURA.ai Chatbot uses a sophisticated architecture with external data integration:
 
 1.  **Frontend (HTML/JS)**: A single-page chat interface that communicates with the backend. It uses WebSockets to receive proactive messages from the AI and standard HTTP requests (Fetch) to send user messages.
 2.  **Backend (Node.js)**: An Express.js server that runs the main chat logic. It features a WebSocket server for pushing messages to the client and an API endpoint (`/api/chat`) for handling user responses.
@@ -62,8 +62,9 @@ PHPaibot uses a sophisticated architecture with external data integration:
 
 1.  **Clone this repository:**
     ```bash
-    git clone https://github.com/username/PHPaibot.git
-    cd PHPaibot
+    git clone https://github.com/username/AURAaichatbot.git
+    cd AURAaichatbot 
+    cd webhook-api && npm install
     ```
 
 2.  **Configure Remote Services (production):**
@@ -96,17 +97,32 @@ PHPaibot uses a sophisticated architecture with external data integration:
 
 ## API Endpoints
 
-- **`/chat`** - Serves the chat UI directly from the webhook API (GET)
-- **`/api/chat`** - Main chat endpoint (POST)
-- **`/api/mood`** - Check AI emotional state and topics (GET)
-- **`/api/process-news`** - Trigger news processing (GET/POST)
-- **`/api/dashboard`** - Aggregated Phase‑3 telemetry for the admin dashboard (GET)
-- **`/api/users`**, **`/api/users/:userId/profile`** - Inspect persisted user/bot profile data (GET)
-- **`/api/opinions`**, **`/api/opinions/:topic`** - Read Aura’s evolving opinions (GET)
-- **`/api/feedback`** - Submit topic-level feedback that shapes opinions (POST)
-- **`/api/news/:id`**, **`/api/news/bulk`** - Manage stored news vectors (DELETE)
-- **`/api/admin/dev-mock`** - Toggle dev mock mode (GET/POST)
-- **`/api/admin/reset-mood`**, **`/api/admin/clear-news`** - Reset mood state or clear news embeddings (POST)
+- **`/health`** *(GET)* – Simple liveness probe for container/platform checks.
+- **`/chat`** *(GET)* – Serves the chat UI directly from the webhook API so UI and API share an origin.
+- **`/api/chat`** *(POST)* – Main conversational endpoint; accepts `{ message, userId, displayName }` and streams responses through the proactive pipeline.
+- **`/api/trigger-thought`** *(POST)* – Allows external automations (e.g., n8n) to broadcast a proactive message via WebSockets.
+- **`/api/mood`** *(GET)* – Returns the current emotional state, recent topics, and timestamp.
+- **`/api/process-news`** *(GET/POST)* – Manually trigger news ingestion and mood updates.
+- **`/api/dashboard`** *(GET)* – Aggregated Phase‑3 telemetry (mood, news, recent activity) for the admin dashboard.
+- **`/api/evolution`** *(GET)* – Detailed Phase‑3 data: AI opinions, user stats, interaction totals.
+- **`/api/users`**, **`/api/users/:userId/profile`** *(GET)* – Inspect persisted user/bot profile data.
+- **`/api/opinions`**, **`/api/opinions/:topic`** *(GET)* – Read Aura’s evolving topic-level opinions.
+- **`/api/feedback`** *(POST)* – Submit topic-level feedback that shapes personality/opinion models.
+- **`/api/news/:id`** *(DELETE)* – Remove a specific news embedding by point ID.
+- **`/api/news/bulk`** *(DELETE)* – Bulk-delete news embeddings that match a title filter.
+- **`/api/admin/dev-mock`** *(GET/POST)* – View or toggle deterministic dev-mock mode.
+- **`/api/admin/reset-mood`**, **`/api/admin/clear-news`** *(POST)* – Reset in-memory mood state and optionally purge stored news.
+- **`/api/thoughts/:userId`** *(GET)* – Legacy polling endpoint for proactive thoughts; superseded by WebSockets but still available.
+- **`/admin`** *(GET)* – Serves `dashboard.html`, the in-repo admin UI.
+- **`/api/auth/register`** *(POST)* – Create a password-protected profile; returns `userId` and display name.
+- **`/api/auth/login`** *(POST)* – Authenticate with an existing profile and retrieve the associated `userId`.
+
+### Authentication & Identity
+
+- Aura now keeps memory keyed to server-side accounts stored in `webhook-api/accounts.json`.
+- The chat UI prompts for a display name + password; the same credentials work across devices, ensuring one continuous profile per person.
+- Passwords are hashed with `crypto.scrypt` + per-user salt before persisting to disk.
+- The `Switch Profile` link in the menu lets you log out locally (clears stored auth info) without affecting server data.
 
 ## News Integration
 
@@ -123,12 +139,13 @@ News analysis includes:
 ## Project Structure
 
 ```
-PHPaibot/
+AURAaichatbot/
 ├── index.html                 # Frontend chat interface
 ├── webhook-api/               # Node.js backend
 │   ├── server.js              # Main API and WebSocket server
 │   ├── news-processor.js      # News analysis and mood system
 │   ├── news-data.json         # Mood state persistence
+│   ├── accounts.json          # Generated user credential store (gitignored)
 │   └── package.json
 ├── legacy/                    # Original PHP implementation (archived)
 ├── docker-compose.yml         # Docker services configuration

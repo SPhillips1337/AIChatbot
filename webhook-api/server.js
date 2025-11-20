@@ -18,13 +18,14 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const { QdrantClient } = require('@qdrant/js-client-rest');
 const NewsProcessor = require('./news-processor');
+const accountStore = require('./accountStore');
 
 // Configuration
 const config = {
   port: process.env.PORT || 3000,
   llmUrl: process.env.LLM_URL || 'http://localhost:8080',
   embeddingUrl: process.env.EMBEDDING_URL || 'http://localhost:8081',
-  qdrantUrl: process.env.QDRANT_URL || 'http://192.168.5.227:6333',
+  qdrantUrl: process.env.QDRANT_URL || 'http://192.168.1.2:6333',
   thoughtsDir: path.join(__dirname, 'thoughts'),
   collectionName: 'conversations',
   debug: true
@@ -759,6 +760,35 @@ app.get('/api/mood', (req, res) => {
   }
 });
 
+// Authentication endpoints
+app.post('/api/auth/register', (req, res) => {
+  const { username, password } = req.body || {};
+  try {
+    const account = accountStore.createAccount(username, password);
+    res.json({
+      success: true,
+      userId: account.userId,
+      displayName: account.username
+    });
+  } catch (error) {
+    const status = error.code === 'USER_EXISTS' ? 409 : 400;
+    res.status(status).json({ error: error.message || 'Failed to create account' });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  const account = accountStore.verifyCredentials(username, password);
+  if (!account) {
+    return res.status(401).json({ error: 'Invalid username or password' });
+  }
+  res.json({
+    success: true,
+    userId: account.userId,
+    displayName: account.username
+  });
+});
+
 // Chat endpoint (existing)
 // Tool functions for AI to access its own state
 const aiTools = {
@@ -1191,10 +1221,15 @@ function analyzeUserSentiment(message) {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, userId, displayName } = req.body;
+    const { message, userId } = req.body;
     
     if (!message || !userId) {
       return res.status(400).json({ error: 'Message and userId are required' });
+    }
+
+    const account = accountStore.getAccountById(userId);
+    if (!account) {
+      return res.status(401).json({ error: 'Unknown user account. Please log out and log back in.' });
     }
 
     const lowerMessage = message.toLowerCase();
@@ -1203,8 +1238,9 @@ app.post('/api/chat', async (req, res) => {
     
     // 1. Define the system prompt with user personality context + AI opinions
     const userProfile = getOrCreateProfile(userId);
-    if (displayName) {
-      applyDisplayNameToProfile(userProfile, displayName);
+    const effectiveDisplayName = account.username;
+    if (effectiveDisplayName) {
+      applyDisplayNameToProfile(userProfile, effectiveDisplayName);
     }
     const topicOpinions = userProfile.topics?.slice(-3).map(topic => {
       const opinion = personalitySystem.getOpinion(topic);

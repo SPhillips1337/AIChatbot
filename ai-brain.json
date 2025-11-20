@@ -110,7 +110,7 @@
     "Sentiment analysis and topic extraction",
     "Runtime dev-mock mode for local testing and admin toggle",
     "Structured fact memory that captures user-specific details (name, favorites, attributes) from conversations",
-    "Lightweight identity system with name prompt and persistent device-bound user IDs"
+    "Password-protected profiles that sync identities across devices"
   ],
   "apiEndpoints": [
     {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface"},
