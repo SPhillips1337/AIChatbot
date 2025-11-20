@@ -53,5 +53,36 @@
     },
     "displayName": "info@happymonkey.ai",
     "updated_at": "2025-11-20T16:46:58.604Z"
+  },
+  "cbe7901d-0bda-475d-85b8-d5d1efa79944": {
+    "interactions": 3,
+    "avgSentiment": 0,
+    "topics": [
+      "yello",
+      "dang,",
+      "you're",
+      "opinionated",
+      "yellow.",
+      "safety",
+      "rails",
+      "impossible",
+      "opinions",
+      "did...\""
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-20T17:04:39.889Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "facts": {
+      "name": {
+        "value": "hi dad",
+        "label": "name",
+        "confidence": 0.99,
+        "source": "user_display_name",
+        "updatedAt": "2025-11-20T17:03:24.488Z"
+      }
+    },
+    "displayName": "hi dad",
+    "updated_at": "2025-11-20T17:04:39.889Z"
   }
 }

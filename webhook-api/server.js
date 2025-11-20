@@ -198,7 +198,7 @@ function startProactiveThoughts() {
     if (conversationState.waitingForResponse && !conversationState.checkInSent) {
       sendCheckIn();
     }
-  }, 300000); // 5 minutes
+  }, parseInt(process.env.PROACTIVE_CHECKIN_MS) || 300000); // 5 minutes
 }
 
 async function sendInitialThought(userId = null) {
@@ -260,7 +260,7 @@ function sendCheckIn() {
       
       stopProactiveThoughts();
     }
-  }, 120000); // 2 minutes
+  }, parseInt(process.env.PROACTIVE_QUIET_MS) || 120000); // 2 minutes
 }
 
 function resetIdleTimeout() {
@@ -275,7 +275,7 @@ function resetIdleTimeout() {
   idleTimeout = setTimeout(() => {
     console.log('User idle for 10 minutes, starting gentle proactive engagement.');
     startProactiveThoughts();
-  }, 600000); // 10 minutes
+  }, parseInt(process.env.IDLE_TIMEOUT_MS) || 600000); // 10 minutes
 }
 
 
