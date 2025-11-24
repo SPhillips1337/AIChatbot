@@ -1,10 +1,8 @@
 {
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 21,
-    "avgSentiment": 0.047619047619047616,
+    "interactions": 23,
+    "avgSentiment": 0.08695652173913043,
     "topics": [
-      "abandoned",
-      "approach",
       "blockers",
       "ubuntu",
       "development",
@@ -22,10 +20,12 @@
       "about",
       "useful",
       "world",
-      "situation"
+      "situation",
+      "what's",
+      "morning"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-20T16:46:58.604Z",
+    "lastSeen": "2025-11-24T11:11:21.046Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -52,10 +52,10 @@
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-20T16:46:58.604Z"
+    "updated_at": "2025-11-24T11:11:21.047Z"
   },
   "cbe7901d-0bda-475d-85b8-d5d1efa79944": {
-    "interactions": 3,
+    "interactions": 8,
     "avgSentiment": 0,
     "topics": [
       "yello",
@@ -67,10 +67,19 @@
       "rails",
       "impossible",
       "opinions",
-      "did...\""
+      "did...\"",
+      "yeehaw",
+      "already",
+      "yellow",
+      "trying",
+      "write",
+      "campaign",
+      "count",
+      "million",
+      "milloon"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-20T17:04:39.889Z",
+    "lastSeen": "2025-11-20T17:29:07.904Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -83,6 +92,35 @@
       }
     },
     "displayName": "hi dad",
-    "updated_at": "2025-11-20T17:04:39.889Z"
+    "updated_at": "2025-11-20T17:29:07.904Z"
+  },
+  "17d09f9f-4525-4e99-9f7a-b6454374b982": {
+    "interactions": 4,
+    "avgSentiment": 0.25,
+    "topics": [
+      "names",
+      "borat,",
+      "goats?",
+      "you..",
+      "alive?",
+      "aura.",
+      "borat",
+      "kazakhstan"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-11-20T18:21:32.305Z",
+    "preferences": {},
+    "trustLevel": 5,
+    "facts": {
+      "name": {
+        "value": "Borat",
+        "label": "name",
+        "confidence": 0.99,
+        "source": "user_display_name",
+        "updatedAt": "2025-11-20T18:15:40.146Z"
+      }
+    },
+    "displayName": "Borat",
+    "updated_at": "2025-11-20T18:21:32.305Z"
   }
 }
