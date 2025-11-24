@@ -384,6 +384,7 @@
         </div>
         <button id="menuToggle" class="menu-toggle" aria-label="Toggle menu">☰</button>
         <div class="menu-links" id="menuLinks">
+            <a id="profileLink" href="#">👤 Profile</a>
             <a id="dashboardLink" href="#" target="_blank" data-admin-only>📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
             <a href="#" onclick="processNews()" data-admin-only>📰 News</a>
@@ -416,6 +417,14 @@
             <small class="password-hint hidden" id="password-hint">Password must be at least 6 characters.</small>
             <button id="auth-submit">Continue</button>
             <p class="auth-error hidden" id="auth-error"></p>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="modal-overlay hidden">
+        <div class="modal-content" id="profile-modal-content">
+            <h2>Your Profile</h2>
+            <div id="profile-facts">Loading...</div>
+            <div style="margin-top:12px; text-align:right;"><button id="close-profile">Close</button></div>
         </div>
     </div>
 
@@ -499,6 +508,18 @@
                         token: authToken
                     });
                     window.open(`${API_BASE}/admin?${params.toString()}`, '_blank');
+                });
+            }
+
+            const profileLink = document.getElementById('profileLink');
+            if (profileLink) {
+                profileLink.addEventListener('click', async (ev) => {
+                    ev.preventDefault();
+                    if (!userId) {
+                        alert('Please log in to view your profile.');
+                        return;
+                    }
+                    openProfileModal();
                 });
             }
             updateMenuVisibility();
@@ -839,6 +860,74 @@
 
         function cleanupLegacyIdentity() {
             LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
+        }
+
+        // Profile modal functions
+        async function openProfileModal() {
+            const modal = document.getElementById('profile-modal');
+            const content = document.getElementById('profile-facts');
+            modal.classList.remove('hidden');
+            content.textContent = 'Loading...';
+            try {
+                const resp = await fetch(`${API_BASE}/api/users/${userId}/profile`, { headers: { 'X-User-Id': userId, 'X-Auth-Token': authToken || '' } });
+                if (!resp.ok) throw new Error('Failed to load profile');
+                const profile = await resp.json();
+                renderProfile(profile);
+            } catch (e) {
+                content.textContent = 'Failed to load profile.';
+            }
+        }
+
+        function closeProfileModal() {
+            const modal = document.getElementById('profile-modal');
+            modal.classList.add('hidden');
+        }
+
+        document.addEventListener('click', (ev) => {
+            if (ev.target && ev.target.id === 'close-profile') closeProfileModal();
+        });
+
+        function renderProfile(profile) {
+            const container = document.getElementById('profile-facts');
+            container.innerHTML = '';
+            const facts = (profile && profile.facts) ? profile.facts : {};
+            const list = document.createElement('div');
+            Object.entries(facts).forEach(([k, v]) => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.justifyContent = 'space-between';
+                row.style.alignItems = 'center';
+                row.style.padding = '6px 0';
+                const left = document.createElement('div');
+                left.textContent = `${k}: ${v.value}`;
+                const right = document.createElement('div');
+                const del = document.createElement('button');
+                del.textContent = 'Delete';
+                del.addEventListener('click', async () => {
+                    if (!confirm(`Delete ${k} from your profile?`)) return;
+                    try {
+                        const r = await fetch(`${API_BASE}/api/profile/remove-fact`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-User-Id': userId, 'X-Auth-Token': authToken || '' },
+                            body: JSON.stringify({ userId, key: k })
+                        });
+                        const j = await r.json();
+                        if (r.ok) {
+                            renderProfile(j.profile || j);
+                        } else {
+                            alert('Failed to delete: ' + (j.error || 'unknown'));
+                        }
+                    } catch (err) {
+                        alert('Failed to delete fact');
+                    }
+                });
+                right.appendChild(del);
+                row.appendChild(left);
+                row.appendChild(right);
+                list.appendChild(row);
+            });
+            if (!Object.keys(facts).length) container.textContent = 'No facts stored yet.';
+            else container.appendChild(list);
         }
 
         function loadAuthFromStorage() {

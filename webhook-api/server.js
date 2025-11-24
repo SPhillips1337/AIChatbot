@@ -1017,6 +1017,15 @@ const FACT_PATTERNS = (factDefinitions || [])
   .filter(fd => !!fd.regex)
   .map(fd => ({ key: fd.key, label: fd.label, regex: fd.regex, confidence: fd.confidence || 0.8 }));
 
+// Setup embedding-backed matcher (created after factDefinitions and generateEmbeddings are available)
+let embeddingMatcher = null;
+try {
+  const makeEmbeddingMatcher = require('./embeddingMatcher');
+  embeddingMatcher = makeEmbeddingMatcher({ generateEmbeddings, factDefinitions, similarityThreshold: parseFloat(process.env.EMBED_SIMILARITY_THRESHOLD || '0.78') });
+} catch (e) {
+  console.error('Failed to initialize embedding matcher:', e.message || e);
+}
+
 function ensureProfileShape(profile = {}) {
   if (!profile.facts) profile.facts = {};
   if (!profile.preferences) profile.preferences = {};
@@ -1530,7 +1539,45 @@ You form and evolve opinions based on news and user interactions.`
     } catch (e) {
       console.error('Fact extraction/confirmation error:', e);
     }
-    
+
+    // Embedding-backed fallback: try semantic matching if nothing was confidently extracted
+    try {
+      if (embeddingMatcher && typeof embeddingMatcher.match === 'function') {
+        const semantic = await embeddingMatcher.match(message);
+        if (semantic && semantic.key) {
+          const key = semantic.key;
+          const value = semantic.value;
+          const sim = semantic.similarity || 0;
+          const profile = getOrCreateProfile(userId);
+          profile.askedQuestions = profile.askedQuestions || [];
+
+          if (sim >= parseFloat(process.env.EMBED_AUTO_SAVE_SIM || '0.90')) {
+            // strong semantic match -> auto-save
+            profile.facts = profile.facts || {};
+            profile.facts[key] = {
+              value,
+              confidence: 0.95,
+              source: 'embedding_match',
+              updatedAt: new Date().toISOString()
+            };
+            profileStore.saveProfile(userId, profile);
+            const ws = userSockets.get(userId);
+            if (ws && ws.readyState === require('ws').OPEN) {
+              ws.send(JSON.stringify({ type: 'fact_saved', key, value, confidence: 0.95 }));
+            }
+          } else if (sim >= parseFloat(process.env.EMBED_CONFIRM_SIM || '0.78')) {
+            // mid-confidence -> ask for inline confirmation
+            const ws = userSockets.get(userId);
+            if (ws && ws.readyState === require('ws').OPEN) {
+              ws.send(JSON.stringify({ type: 'fact_confirmation', key, value, confidence: sim, message: `I think you meant ${value} — is that correct?` }));
+            }
+          }
+        }
+      }
+    } catch (emErr) {
+      console.error('Embedding match error:', emErr);
+    }
+
     // Return response
     res.json({
       message: botResponse
@@ -1647,6 +1694,31 @@ app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
   }
 });
 
+// Endpoint to remove a stored fact from a user's profile
+app.post('/api/profile/remove-fact', requireAuth(), (req, res) => {
+  try {
+    const { userId: bodyUserId, key } = req.body || {};
+    if (!bodyUserId || !key) return res.status(400).json({ error: 'userId and key are required' });
+
+    if (!req.account) return res.status(401).json({ error: 'Authentication required' });
+    if (req.account.userId !== bodyUserId && req.account.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const profile = getOrCreateProfile(bodyUserId);
+    profile.facts = profile.facts || {};
+    if (profile.facts[key]) {
+      delete profile.facts[key];
+      profileStore.saveProfile(bodyUserId, profile);
+      return res.json({ success: true, profile });
+    }
+    return res.status(404).json({ error: 'Fact not found' });
+  } catch (err) {
+    console.error('Error removing fact:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Serve dashboard UI from the main server at /admin
 app.get('/admin', (req, res) => {
   const { userId, token } = req.query;
@@ -1712,6 +1784,16 @@ server.listen(config.port, async () => {
     console.error('Error loading profiles from profile store:', err);
   }
   
+  // Preload example embeddings for semantic matching (if available)
+  try {
+    if (embeddingMatcher && typeof embeddingMatcher.preloadExampleEmbeddings === 'function') {
+      console.log('Preloading example embeddings...');
+      await embeddingMatcher.preloadExampleEmbeddings();
+    }
+  } catch (e) {
+    console.error('Error preloading example embeddings:', e);
+  }
+
   // Process news feeds on startup
   console.log('Processing initial news feeds...');
   await newsProcessor.processNewsFeeds();

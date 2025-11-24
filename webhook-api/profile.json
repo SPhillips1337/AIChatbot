@@ -1,31 +1,31 @@
 {
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 39,
-    "avgSentiment": 0.07692307692307693,
+    "interactions": 47,
+    "avgSentiment": 0.10638297872340426,
     "topics": [
-      "projects",
-      "relating",
-      "software",
-      "engineering",
-      "tools",
-      "would",
-      "plugins",
-      "wordpress",
-      "various",
-      "experiments",
-      "really",
-      "occasional",
-      "match",
+      "actually",
+      "reasons",
       "fortnite",
-      "rocket",
-      "racing",
-      "league",
-      "that's",
-      "quite",
-      "playstation"
+      "because",
+      "quick",
+      "minute",
+      "match",
+      "lifestyle",
+      "starcraft",
+      "amazing",
+      "really",
+      "enjoyed",
+      "campaign",
+      "traditionally",
+      "civilization,",
+      "masters",
+      "orion,",
+      "builders",
+      "skylines",
+      "games"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-24T12:23:37.733Z",
+    "lastSeen": "2025-11-24T12:43:36.862Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -36,13 +36,6 @@
         "source": "user_display_name",
         "updatedAt": "2025-11-20T16:43:21.991Z"
       },
-      "favorite_color_because_it": {
-        "value": "the color of my eyes",
-        "label": "favorite color because it",
-        "confidence": 0.8,
-        "source": "my favorite color because it is the color of my eyes",
-        "updatedAt": "2025-11-20T11:18:27.739Z"
-      },
       "favorite_color": {
         "value": "blue",
         "label": "favorite color",
@@ -52,12 +45,22 @@
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-24T12:23:37.733Z",
+    "updated_at": "2025-11-24T12:43:36.862Z",
     "askedQuestions": [
       {
         "key": "pronouns",
         "question": "Which pronouns do you prefer (e.g., he/him, she/her, they/them)?",
         "askedAt": "2025-11-24T12:23:22.397Z"
+      },
+      {
+        "key": "timezone",
+        "question": "Which timezone should I use when thinking about your day?",
+        "askedAt": "2025-11-24T12:41:21.661Z"
+      },
+      {
+        "key": "city",
+        "question": "Where are you based (city or town)?",
+        "askedAt": "2025-11-24T12:43:27.639Z"
       }
     ]
   },
