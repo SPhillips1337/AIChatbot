@@ -1484,9 +1484,39 @@ You form and evolve opinions based on news and user interactions.`
       
       if (stillMissing.length > 0 && Math.random() < askChance) {
         const discoveryQuestion = await generateDiscoveryQuestion(userId);
-        if (discoveryQuestion && !botResponse.toLowerCase().includes(discoveryQuestion.toLowerCase().substring(0, 20))) {
-          // Only append if the question isn't already in the response
-          botResponse += ` ${discoveryQuestion}`;
+        // discoveryQuestion may be a string (legacy) or an object { question, key }
+        let dqText = null;
+        let dqKey = null;
+        if (discoveryQuestion) {
+          if (typeof discoveryQuestion === 'string') {
+            dqText = discoveryQuestion;
+          } else if (typeof discoveryQuestion === 'object' && discoveryQuestion.question) {
+            dqText = discoveryQuestion.question;
+            dqKey = discoveryQuestion.key || null;
+          }
+        }
+
+        if (dqText) {
+          try {
+            const snippet = dqText.substring(0, 20).toLowerCase();
+            if (!botResponse.toLowerCase().includes(snippet)) {
+              // Only append if the question isn't already in the response
+              botResponse += ` ${dqText}`;
+            }
+          } catch (e) {
+            // Fallback: append raw text if any error
+            botResponse += ` ${dqText}`;
+          }
+
+          // If we have a websocket for this user, also send a structured discovery_message
+          try {
+            const ws = userSockets.get(userId);
+            if (ws && ws.readyState === require('ws').OPEN) {
+              ws.send(JSON.stringify({ sender: 'AI', type: 'discovery_question', key: dqKey, message: dqText, timestamp: new Date().toISOString() }));
+            }
+          } catch (e) {
+            console.warn('Failed to send discovery_question WS:', e.message || e);
+          }
         }
       }
     }

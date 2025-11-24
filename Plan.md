@@ -1,51 +1,47 @@
 # PHPaibot Development Plan (Updated)
 
 ## Purpose of this update
-This update documents a focused effort to improve Aura's structured fact collection and discovery question system and to introduce optional NLP/embedding-backed confirmation to reduce overfitting on example facts (e.g., "favorite color"). It captures the current state and next steps for Phase 3.
+This update captures the recent implementation work for structured facts, embedding-backed confirmation, and a lightweight inline profile UI so we can pick up development later with a clear roadmap and status.
 
-## Motivation
-During testing and feedback we observed the system over-emphasizes certain example facts (notably `favorite_color`) because the original fact extraction relied on a small set of regexes seeded from early examples. To make Aura more natural and useful, we will:
+## Recent accomplishments
+- Added `webhook-api/fact_definitions.js` with a curated list of structured facts, priorities, templates, and example values.
+- Replaced the previous hardcoded regex array with a definition-driven extraction pipeline.
+- Implemented `askedQuestions` tracking in profiles to prevent repetitive questioning and to honor cooldowns.
+- Implemented inline, non-modal confirmation flow (WS-driven) for mid-confidence extractions and new endpoint `POST /api/profile/confirm-fact` to accept/reject facts.
+- Implemented an embedding-backed matcher (`webhook-api/embeddingMatcher.js`) that preloads example embeddings and performs semantic matching to handle paraphrases.
+- Added server-side handling to auto-save high-confidence extractions and to prompt inline confirmations for mid-confidence matches.
+- Added in-chat Profile UI and a server endpoint `POST /api/profile/remove-fact` to allow users to view and remove stored facts.
 
-- Expand the ontology of structured facts Aura tries to learn.
-- Add templates and rotation/paraphrase behavior so questions don't sound repetitive.
-- Track question history to avoid repeats and respect user preferences.
-- Add a confidence model and an optional confirmation flow for low-confidence extractions.
-- Optionally integrate lightweight NLP/NER and/or embedding-based semantic matching to improve extraction and paraphrase handling.
+## Short-term plan (next sprint)
+1. Tune thresholds: adjust `EMBED_AUTO_SAVE_SIM`, `EMBED_CONFIRM_SIM`, and extraction confidence thresholds based on telemetry.
+2. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
+3. Add logging/metrics to capture confirmation rates and false-positive rates.
+4. Harden authentication checks and ensure all profile mutations require proper `X-User-Id` / `X-Auth-Token` headers.
 
-## Short-term Plan (next sprint)
-1. Add `webhook-api/fact_definitions.js` with a curated list of fact definitions (key, label, priority, sensitivity, optional regex, question templates). (Completed)
-2. Replace the hardcoded `FACT_PATTERNS` with dynamic loading from `fact_definitions.js` and adjust `extractStructuredFacts` to use the new definitions. (In progress / code updated)
-3. Improve `detectMissingFacts` to compute priority from definitions and existing profile data. (In progress / code updated)
-4. Track `askedQuestions` in user profiles so we only re-ask after a configurable cooldown. (Planned)
-5. Add a basic confirmation flow: when an extraction is low-confidence, present a clarifying question to the user before persisting. (Planned)
+## Medium-term plan
+1. Create an admin UI for tuning thresholds and viewing per-fact metrics (accept/confirm/reject counts).
+2. Integrate optional NLP/NER service for entity extraction (names, dates, places) to complement regex + embeddings.
+3. Implement privacy/consent flows for high-sensitivity facts (e.g., require explicit modal consent before storing birthdays or contact info).
+4. Improve onboarding UX: disclose what the system remembers and provide a simple “memory” settings panel in the profile modal.
 
-## Medium-term Plan (following weeks)
-1. Add embedding-backed confirmation: generate embeddings for candidate answers and compare to canonical example embeddings to decide when to confirm. This requires `EMBEDDING_URL` to be configured for production.
-2. Add optional NLP/NER integration (e.g., a lightweight local library or an external spaCy endpoint) to extract entities like PERSON, GPE, DATE for higher accuracy.
-3. Implement paraphrasing of templates using the configured LLM to keep questions fresh.
-4. Add rate-limiting and session scoring to limit discovery questions to a comfortable cadence (e.g., at most 1 discovery question per idle event, max 3/day).
-5. Add UI components for users to view and manage stored facts, and to opt out of memory collection.
+## Long-term plan
+1. Curriculum learning: adapt the question ordering per user cohort and domain (e.g., ask gaming facts earlier for gamers).
+2. Retention & compliance: add export/delete tools and retention policies for user data.
+3. Deploy monitoring and periodic auditing of saved facts to detect potential PII captures that need special handling.
 
-## Long-term Plan
-1. Continuous profiling and metrics: track acceptance rates of discovery questions, false positive extractions, and user-initiated deletions to refine the curriculum and priorities.
-2. Privacy & compliance: add explicit consent, retention policies, and export/delete tools for user data.
-3. Personalization & curriculum learning: dynamically reorder discovery priorities based on user interaction patterns and domain (e.g., gaming users get gaming questions earlier).
+## Testing & validation
+- Create a test-suite of example utterances for each fact (canonical and paraphrased) and assert expected extraction/confirmation behavior.
+- Simulate user sessions to measure how often the system asks discovery questions and how frequently users confirm/reject.
+- Use local `DEV_MOCK` to run fast offline tests without calling remote embeddings/LLMs.
 
-## Implementation Notes
-- The code now loads `webhook-api/fact_definitions.js` which contains templates and optional regexes. Regexes are used when present for deterministic extraction. For facts without regex, future NLP/embedding approaches will be used.
-- `detectMissingFacts` now uses definition priorities and requiredConfidence thresholds.
-- The next code changes will add `askedQuestions` metadata into `profileStore` and a confirmation endpoint that the client can use to confirm suspect facts.
-
-## Testing Plan
-- Unit tests for `extractStructuredFacts` with many natural-language variants to ensure we do not over-extract or mis-label inputs.
-- Integration tests for the confirmation flow (simulate user confirming / rejecting candidate facts).
-- Manual QA: run the UI and observe discovery question cadence and phrasing; measure how often users confirm or correct facts.
-
-## Current status (summary)
-- Server and WebSocket stack: Running (Node.js webhook API). UI served at `/chat`.
-- Fact extraction: Migrated to a definition-driven model (`webhook-api/fact_definitions.js`). Regex-driven extractions retained where useful; broader support via NLP/embeddings is planned.
-- Next code steps: Add profile question history, confirmation flow, and optional embedding/NLP integration.
+## Notes for future work
+- The system defaults are conservative: auto-save only for high-confidence regex or embedding matches. Inline confirmation balances natural conversation with data quality.
+- Example embeddings are preloaded at server startup; if `fact_definitions.js` changes, restart the server to refresh cached embeddings.
 
 ---
 
-If you'd like, I can continue and implement the confirmation flow and the `askedQuestions` persistence next, or prototype an embedding-backed candidate matcher (requires `EMBEDDING_URL`). Which would you prefer me to implement next?
+If you want, I can:
+- Add automated tests for the extraction/matcher now, or
+- Create a small telemetry endpoint that logs confirm/auto-save events for a week so we can tune thresholds empirically.
+
+Which would you prefer as the next task?

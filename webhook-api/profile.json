@@ -1,31 +1,31 @@
 {
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 47,
-    "avgSentiment": 0.10638297872340426,
+    "interactions": 53,
+    "avgSentiment": 0.09433962264150944,
     "topics": [
-      "actually",
-      "reasons",
-      "fortnite",
-      "because",
-      "quick",
-      "minute",
-      "match",
-      "lifestyle",
-      "starcraft",
-      "amazing",
-      "really",
-      "enjoyed",
-      "campaign",
-      "traditionally",
       "civilization,",
       "masters",
       "orion,",
       "builders",
       "skylines",
-      "games"
+      "games",
+      "hello",
+      "shall",
+      "carry",
+      "previous",
+      "conversation?",
+      "remember?",
+      "stephen,",
+      "pronouns",
+      "based",
+      "devon",
+      "england",
+      "united",
+      "kingdom",
+      "continue"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-24T12:43:36.862Z",
+    "lastSeen": "2025-11-24T13:53:12.249Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -45,7 +45,7 @@
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-24T12:43:36.862Z",
+    "updated_at": "2025-11-24T13:53:12.249Z",
     "askedQuestions": [
       {
         "key": "pronouns",
@@ -61,6 +61,11 @@
         "key": "city",
         "question": "Where are you based (city or town)?",
         "askedAt": "2025-11-24T12:43:27.639Z"
+      },
+      {
+        "key": "occupation",
+        "question": "What's your occupation or main focus these days?",
+        "askedAt": "2025-11-24T13:50:05.373Z"
       }
     ]
   },
