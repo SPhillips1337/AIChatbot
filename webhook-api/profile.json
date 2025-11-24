@@ -1,31 +1,31 @@
 {
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 23,
-    "avgSentiment": 0.08695652173913043,
+    "interactions": 39,
+    "avgSentiment": 0.07692307692307693,
     "topics": [
-      "blockers",
-      "ubuntu",
-      "development",
-      "machine",
-      "return",
-      "future",
-      "other",
-      "developers",
+      "projects",
+      "relating",
+      "software",
+      "engineering",
+      "tools",
       "would",
-      "creating",
-      "project",
-      "effective",
-      "because",
-      "dubious",
-      "about",
-      "useful",
-      "world",
-      "situation",
-      "what's",
-      "morning"
+      "plugins",
+      "wordpress",
+      "various",
+      "experiments",
+      "really",
+      "occasional",
+      "match",
+      "fortnite",
+      "rocket",
+      "racing",
+      "league",
+      "that's",
+      "quite",
+      "playstation"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-24T11:11:21.046Z",
+    "lastSeen": "2025-11-24T12:23:37.733Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -52,7 +52,14 @@
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-24T11:11:21.047Z"
+    "updated_at": "2025-11-24T12:23:37.733Z",
+    "askedQuestions": [
+      {
+        "key": "pronouns",
+        "question": "Which pronouns do you prefer (e.g., he/him, she/her, they/them)?",
+        "askedAt": "2025-11-24T12:23:22.397Z"
+      }
+    ]
   },
   "cbe7901d-0bda-475d-85b8-d5d1efa79944": {
     "interactions": 8,

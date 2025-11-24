@@ -338,6 +338,12 @@
                 height: 44px;
             }
         }
+        .inline-actions { display:flex; gap:8px; margin-top:8px; }
+        .inline-actions button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; font-size:0.9em }
+        .inline-yes { background:#28a745; color:#fff }
+        .inline-no { background:#dc3545; color:#fff }
+        .inline-edit { background:#6c757d; color:#fff }
+
         @media (max-width: 520px) {
             .brand h1 {
                 font-size: 1em;
@@ -536,17 +542,47 @@
                     statusDiv.textContent = 'Connected';
                     statusDiv.style.color = '#28a745';
                     notifyUserActivity(true, 'connected');
+                    // Send auth binding for this websocket so server can target messages
+                    try {
+                        if (userId && authToken) {
+                            ws.send(JSON.stringify({ type: 'auth', userId: userId, token: authToken }));
+                        } else if (userId) {
+                            ws.send(JSON.stringify({ type: 'auth', userId: userId }));
+                        }
+                    } catch (e) {
+                        console.warn('WS auth send failed', e);
+                    }
                 };
 
                 ws.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+
                         if (data.type === 'proactive_message' && data.message) {
                             addMessage('AI', data.message);
                             return;
                         }
+
+                        if (data.type === 'discovery_question' && data.message) {
+                            addDiscoveryMessage(data.key, data.message);
+                            return;
+                        }
+
+                        if (data.type === 'fact_confirmation') {
+                            // server suggests a value and asks user to confirm
+                            addFactConfirmation(data.key, data.value, data.message || `I think you said ${data.value} — is that right?`, data.confidence);
+                            return;
+                        }
+
+                        if (data.type === 'fact_saved') {
+                            // Inform user a fact was saved
+                            addMessage('AI', `Saved: ${data.key} — ${data.value}`);
+                            return;
+                        }
+
                         if (data.sender && data.message) {
                             addMessage(data.sender, data.message);
+                            return;
                         }
                     } catch (error) {
                         console.error('Error parsing WebSocket message:', error);
@@ -652,6 +688,106 @@
                 
                 chatBox.appendChild(messageDiv);
                 chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            function addDiscoveryMessage(key, message) {
+                const messageDiv = document.createElement('div');
+                const senderDiv = document.createElement('div');
+                const textDiv = document.createElement('div');
+
+                messageDiv.classList.add('message', 'ai-message');
+                senderDiv.classList.add('sender');
+                textDiv.classList.add('text');
+
+                senderDiv.textContent = 'AI';
+                textDiv.textContent = message;
+                textDiv.setAttribute('data-fact-key', key || '');
+
+                messageDiv.appendChild(senderDiv);
+                messageDiv.appendChild(textDiv);
+
+                chatBox.appendChild(messageDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            function addFactConfirmation(key, value, promptText, confidence) {
+                const messageDiv = document.createElement('div');
+                const senderDiv = document.createElement('div');
+                const textDiv = document.createElement('div');
+                
+                messageDiv.classList.add('message', 'ai-message');
+                senderDiv.classList.add('sender');
+                textDiv.classList.add('text');
+
+                senderDiv.textContent = 'AI';
+                textDiv.textContent = promptText;
+
+                messageDiv.appendChild(senderDiv);
+                messageDiv.appendChild(textDiv);
+
+                // Inline action buttons
+                const actions = document.createElement('div');
+                actions.classList.add('inline-actions');
+
+                const yesBtn = document.createElement('button');
+                yesBtn.textContent = 'Yes';
+                yesBtn.className = 'inline-yes';
+                yesBtn.addEventListener('click', async () => {
+                    await confirmFact(key, value, true);
+                    actions.remove();
+                });
+
+                const noBtn = document.createElement('button');
+                noBtn.textContent = 'No';
+                noBtn.className = 'inline-no';
+                noBtn.addEventListener('click', async () => {
+                    await confirmFact(key, value, false);
+                    actions.remove();
+                });
+
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Edit';
+                editBtn.className = 'inline-edit';
+                editBtn.addEventListener('click', async () => {
+                    const edited = prompt('Edit the value:', value || '');
+                    if (edited !== null) {
+                        await confirmFact(key, edited, true);
+                        actions.remove();
+                    }
+                });
+
+                actions.appendChild(yesBtn);
+                actions.appendChild(noBtn);
+                actions.appendChild(editBtn);
+
+                messageDiv.appendChild(actions);
+
+                chatBox.appendChild(messageDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            async function confirmFact(key, value, confirmed) {
+                try {
+                    const resp = await fetch(`${API_BASE}/api/profile/confirm-fact`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-User-Id': userId,
+                            'X-Auth-Token': authToken || ''
+                        },
+                        body: JSON.stringify({ userId, key, value, confirmed })
+                    });
+                    const data = await resp.json();
+                    if (resp.ok) {
+                        if (confirmed) addMessage('AI', `Saved: ${key} — ${value}`);
+                        else addMessage('AI', `Okay, I won't save that.`);
+                    } else {
+                        addMessage('Error', `Failed to confirm: ${data.error || 'unknown'}`);
+                    }
+                } catch (e) {
+                    console.error('confirmFact error', e);
+                    addMessage('Error', 'Failed to confirm fact.');
+                }
             }
 
             sendButton.addEventListener('click', sendMessage);

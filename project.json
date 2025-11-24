@@ -2,9 +2,9 @@
   "project": {
     "name": "PHPaibot",
     "description": "A proactive PHP chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
-    "version": "0.3.1",
+    "version": "0.4.0",
     "repository": "https://github.com/username/PHPaibot",
-    "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API"
+    "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API; expanding structured facts and NLP-enhanced extraction"
   },
   "architecture": {
     "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote LLM and embedding endpoints. Proactive thoughts are dynamically generated and influenced by current events.",
@@ -92,9 +92,11 @@
           {"name": "Create feedback loops for continuous learning", "status": "In Progress"},
           {"name": "Develop opinion formation mechanisms", "status": "In Progress"},
           {"name": "Implement long-term memory and relationship tracking", "status": "Planned"},
-          {"name": "Add personality adaptation based on user interactions", "status": "In Progress"}
+          {"name": "Add personality adaptation based on user interactions", "status": "In Progress"},
+          {"name": "Expand structured fact extraction and discovery question system", "status": "In Progress"},
+          {"name": "Add optional NLP/NER and embedding-backed confirmation flow", "status": "Planned"}
         ],
-        "deliverables": ["Chatbot that adapts and develops personality over time."],
+        "deliverables": ["Chatbot that adapts and develops personality over time and reliably learns user facts."],
         "status": "In Progress"
       }
     ]
@@ -110,6 +112,7 @@
     "Sentiment analysis and topic extraction",
     "Runtime dev-mock mode for local testing and admin toggle",
     "Structured fact memory that captures user-specific details (name, favorites, attributes) from conversations",
+    "Profile question history and discovery flow (basic)",
     "Password-protected profiles that sync identities across devices",
     "Role-aware UI (admin vs user) with gated controls",
     "Authenticated UI boot flow that waits for a valid session before enabling `/`/`/chat` interactions"
@@ -125,11 +128,13 @@
     {"endpoint": "/chat", "method": "GET", "description": "Serve chat UI from webhook API (same origin)"}
   ],
   "nextSteps": [
-    "Complete feedback loops for continuous learning",
-    "Implement long-term relationship memory beyond individual conversations",
-    "Create opinion formation based on accumulated news and interactions",
+    "Finish feedback loops for continuous learning",
     "Harden admin endpoints with authentication",
-    "Integrate a production LLM/embedding service and disable dev-mock for live runs"
+    "Expand structured fact extraction patterns and templates",
+    "Add an embedding-backed confirmation flow for low-confidence facts",
+    "Integrate optional NLP/NER service for improved extraction",
+    "Add automated tests for fact extraction and question flow",
+    "Deploy production LLM/EMBEDDING endpoint and disable dev-mock"
   ],
   "statusDetails": {
     "externalServices": {
@@ -151,5 +156,5 @@
     },
     "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock."
   },
-  "lastUpdated": "2025-11-20T15:00:00Z"
+  "lastUpdated": "2025-11-24T00:00:00Z"
 }

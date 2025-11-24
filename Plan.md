@@ -1,64 +1,51 @@
-# PHPaibot Development Plan
+# PHPaibot Development Plan (Updated)
 
-## Project Vision
-Create a proactive PHP chatbot that simulates human-like thinking by:
-1. Generating "random thoughts" based on previous conversations, current events, and general knowledge
-2. Maintaining memory of past interactions
-3. Developing a personality that evolves based on user interactions
-4. Initiating conversations rather than just responding
+## Purpose of this update
+This update documents a focused effort to improve Aura's structured fact collection and discovery question system and to introduce optional NLP/embedding-backed confirmation to reduce overfitting on example facts (e.g., "favorite color"). It captures the current state and next steps for Phase 3.
 
-## Architecture Overview (Current Implementation)
+## Motivation
+During testing and feedback we observed the system over-emphasizes certain example facts (notably `favorite_color`) because the original fact extraction relied on a small set of regexes seeded from early examples. To make Aura more natural and useful, we will:
 
-The proof-of-concept has matured into a production-style hybrid push/pull chat system with persistent memory and Phase‑3 personality features.
+- Expand the ontology of structured facts Aura tries to learn.
+- Add templates and rotation/paraphrase behavior so questions don't sound repetitive.
+- Track question history to avoid repeats and respect user preferences.
+- Add a confidence model and an optional confirmation flow for low-confidence extractions.
+- Optionally integrate lightweight NLP/NER and/or embedding-based semantic matching to improve extraction and paraphrase handling.
 
-- **Frontend (HTML/JS)**: A single-page chat interface served directly from the webhook API at `/chat`. It prompts users for a display name, stores a device-bound ID in `localStorage`, and uses WebSockets for proactive thoughts plus HTTP (Fetch) for user messages so UI and API share the same origin.
-- **Backend (Node.js)**: The Express.js webhook API (`webhook-api/server.js`) manages chat logic, proactive engagement timers, admin APIs, the dashboard data feed, and WebSocket push delivery.
-- **Remote AI Models**: The server calls OpenAI-compatible endpoints for `/v1/chat/completions` and `/v1/embeddings` (e.g., Ollama, OpenRouter). A `DEV_MOCK` flag or `/api/admin/dev-mock` toggles canned responses for local testing.
-- **Memory (Qdrant Vector DB)**: Conversations, news context, and thoughts are stored in Qdrant (`@qdrant/js-client-rest`). Embeddings come from the remote endpoint; dev-mock returns deterministic vectors for development.
-- **News Processor & Mood System**: `webhook-api/news-processor.js` ingests RSS feeds, scores sentiment, updates `news-data.json`, and stores embeddings, providing inputs to proactive thoughts and the dashboard.
-- **Profile & Personality Store**: `webhook-api/profileStore.js` persists user/bot traits and structured personal facts (name, favorites, attributes) to `profile.json`; the in-memory `personalitySystem` tracks evolving opinions exposed via `/api/opinions`.
+## Short-term Plan (next sprint)
+1. Add `webhook-api/fact_definitions.js` with a curated list of fact definitions (key, label, priority, sensitivity, optional regex, question templates). (Completed)
+2. Replace the hardcoded `FACT_PATTERNS` with dynamic loading from `fact_definitions.js` and adjust `extractStructuredFacts` to use the new definitions. (In progress / code updated)
+3. Improve `detectMissingFacts` to compute priority from definitions and existing profile data. (In progress / code updated)
+4. Track `askedQuestions` in user profiles so we only re-ask after a configurable cooldown. (Planned)
+5. Add a basic confirmation flow: when an extraction is low-confidence, present a clarifying question to the user before persisting. (Planned)
 
-## Phased Development Plan
+## Medium-term Plan (following weeks)
+1. Add embedding-backed confirmation: generate embeddings for candidate answers and compare to canonical example embeddings to decide when to confirm. This requires `EMBEDDING_URL` to be configured for production.
+2. Add optional NLP/NER integration (e.g., a lightweight local library or an external spaCy endpoint) to extract entities like PERSON, GPE, DATE for higher accuracy.
+3. Implement paraphrasing of templates using the configured LLM to keep questions fresh.
+4. Add rate-limiting and session scoring to limit discovery questions to a comfortable cadence (e.g., at most 1 discovery question per idle event, max 3/day).
+5. Add UI components for users to view and manage stored facts, and to opt out of memory collection.
 
-### Phase 1: PoC & Core Conversational Loop [Completed]
-- **Goal**: Create a working chatbot with a proactive push-based interface and contextual memory.
-- **Achievements**:
-    - Implemented a WebSocket push-based frontend (`index.html`) and a Node.js backend (`webhook-api/server.js`).
-    - Externalized AI models to a remote Ollama endpoint, removing all local AI/ML Docker services.
-    - Integrated the Qdrant vector database for semantic memory (with dev-mock embeddings for local runs).
-    - Implemented a robust conversational memory system that provides context to the AI.
-    - Created an idle timer system to manage when the AI sends proactive thoughts, making the interaction more natural.
+## Long-term Plan
+1. Continuous profiling and metrics: track acceptance rates of discovery questions, false positive extractions, and user-initiated deletions to refine the curriculum and priorities.
+2. Privacy & compliance: add explicit consent, retention policies, and export/delete tools for user data.
+3. Personalization & curriculum learning: dynamically reorder discovery priorities based on user interaction patterns and domain (e.g., gaming users get gaming questions earlier).
 
-### Phase 2: The Thinker [Completed]
-- **Goal**: Create a chatbot that can initiate conversations with unique, dynamically generated thoughts.
-- **Implementation & Notes**:
-    - The Node.js backend (`webhook-api/server.js`) implements dynamic LLM-based proactive thought generation and integrates `webhook-api/news-processor.js` for news-aware thoughts.
-    - News processing and mood tracking are implemented and persisted to `webhook-api/news-data.json`.
-    - The system uses a vector database (Qdrant) for semantic storage; configure `QDRANT_URL` to point to your instance or adapt the code to a JSON fallback for lightweight testing.
-- **Status**: Completed
+## Implementation Notes
+- The code now loads `webhook-api/fact_definitions.js` which contains templates and optional regexes. Regexes are used when present for deterministic extraction. For facts without regex, future NLP/embedding approaches will be used.
+- `detectMissingFacts` now uses definition priorities and requiredConfidence thresholds.
+- The next code changes will add `askedQuestions` metadata into `profileStore` and a confirmation endpoint that the client can use to confirm suspect facts.
 
-### Phase 3: Personality & Evolution
-- **Goal**: Create a chatbot that adapts over time and develops a unique personality.
-- **Status Snapshot**:
-    - Profile store (`profileStore.js` + `/api/users`) persists sentiment, trust, topics, and structured facts tied to stable device/user IDs. **Implemented**
-    - Personality system tracks evolving opinions exposed via `/api/opinions` and updated by `/api/feedback`. **In Progress**
-    - Thought generation consults profiles + news (see `updateUserProfile` + `newsProcessor.generateNewsInfluencedThought`). **In Progress**
-    - Admin/dashboard endpoints (`/api/dashboard`, `/api/admin/*`, `/admin`) provide operational visibility and controls. **Implemented**
-    - Unified UI origin (`/chat` served by the webhook API). **Implemented**
-    - Structured fact memory extraction (name, favorites, attributes) feeds prompts and direct answers. **In Progress**
-    - Lightweight identity prompt + device-bound IDs ensure the same persona persists across sessions. **Implemented**
+## Testing Plan
+- Unit tests for `extractStructuredFacts` with many natural-language variants to ensure we do not over-extract or mis-label inputs.
+- Integration tests for the confirmation flow (simulate user confirming / rejecting candidate facts).
+- Manual QA: run the UI and observe discovery question cadence and phrasing; measure how often users confirm or correct facts.
 
-## Next Steps
-- Short-term:
-    - Finish feedback loop wiring so user feedback updates the personality/opinions system persistently.
-    - Harden admin endpoints (add authentication) before exposing toggles in production.
-    - Point `LLM_URL` and `EMBEDDING_URL` at a production-capable gateway and verify end-to-end behavior; then disable dev-mock.
-- Medium-term:
-    - Expand structured fact extraction patterns (relationships, projects, multi-user preferences) and add confirmation prompts for low-confidence data.
-    - Implement long-term relationship memory and opinion consolidation from news + user interactions.
-    - Add automated tests and monitoring for news processing and persistence.
-    - Layer proper authentication or multi-user account management on top of the current lightweight identity flow.
+## Current status (summary)
+- Server and WebSocket stack: Running (Node.js webhook API). UI served at `/chat`.
+- Fact extraction: Migrated to a definition-driven model (`webhook-api/fact_definitions.js`). Regex-driven extractions retained where useful; broader support via NLP/embeddings is planned.
+- Next code steps: Add profile question history, confirmation flow, and optional embedding/NLP integration.
 
-Notes:
-- You can toggle dev-mock at runtime via `POST /api/admin/dev-mock` (JSON `{ "enabled": true|false }`).
-- For local testing, start the webhook API with `PORT=4002` (or your preferred port) and open the chat at `http://localhost:4002/chat` (served by the Node app) or use `index.html?api_base=http://localhost:4002` if you prefer the PHP container.
+---
+
+If you'd like, I can continue and implement the confirmation flow and the `askedQuestions` persistence next, or prototype an embedding-backed candidate matcher (requires `EMBEDDING_URL`). Which would you prefer me to implement next?

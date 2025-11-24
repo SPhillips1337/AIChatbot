@@ -205,19 +205,35 @@ async function sendInitialThought(userId = null) {
   if (conversationState.waitingForResponse) return;
   
   const thought = await generateProactiveThought(userId);
-  console.log(`Broadcasting initial thought: ${thought}`);
-  
-  // Broadcast to all connected clients
-  wss.clients.forEach(client => {
-    if (client.readyState === client.OPEN) {
-      client.send(JSON.stringify({
-        sender: 'AI',
-        type: 'proactive_message',
-        message: thought,
-        timestamp: new Date().toISOString()
-      }));
-    }
-  });
+
+  // If discovery question object returned, broadcast as discovery_question with key
+  if (thought && typeof thought === 'object' && thought.key) {
+    console.log(`Broadcasting discovery question for key ${thought.key}: ${thought.question}`);
+    wss.clients.forEach(client => {
+      if (client.readyState === client.OPEN) {
+        client.send(JSON.stringify({
+          sender: 'AI',
+          type: 'discovery_question',
+          key: thought.key,
+          message: thought.question,
+          timestamp: new Date().toISOString()
+        }));
+      }
+    });
+  } else {
+    console.log(`Broadcasting initial thought: ${thought}`);
+    // Broadcast to all connected clients
+    wss.clients.forEach(client => {
+      if (client.readyState === client.OPEN) {
+        client.send(JSON.stringify({
+          sender: 'AI',
+          type: 'proactive_message',
+          message: thought,
+          timestamp: new Date().toISOString()
+        }));
+      }
+    });
+  }
   
   conversationState.waitingForResponse = true;
   conversationState.lastMessage = Date.now();
@@ -279,17 +295,42 @@ function resetIdleTimeout() {
 }
 
 
+// Map of userId => ws to target messages to a specific user
+const userSockets = new Map();
+
 wss.on('connection', (ws) => {
   console.log('Client connected to WebSocket');
+  ws.isAlive = true;
+  ws.userId = null;
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-      // Check for activity signals from the client
-      if (data.type === 'user_typing' || data.type === 'user_activity') {
-        // console.log('User activity detected, resetting idle timer.');
-        resetIdleTimeout();
+
+      // Authentication message from client to bind ws to a userId
+      if (data.type === 'auth' && data.userId) {
+        // Verify token if provided
+        const token = data.token;
+        if (token && accountStore.verifySessionToken(data.userId, token)) {
+          ws.userId = data.userId;
+          userSockets.set(data.userId, ws);
+          console.log('WebSocket authenticated for user:', data.userId);
+        } else if (!token) {
+          // Allow anonymous bind without token (best-effort)
+          ws.userId = data.userId;
+          userSockets.set(data.userId, ws);
+          console.log('WebSocket associated with user (no token):', data.userId);
+        }
+        return;
       }
+
+      const dataObj = data;
+      // Check for activity signals from the client
+      if (dataObj.type === 'user_typing' || dataObj.type === 'user_activity') {
+        resetIdleTimeout();
+        return;
+      }
+
     } catch (e) {
       console.log('Received non-JSON message from client: %s', message);
     }
@@ -297,6 +338,7 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     console.log('Client disconnected');
+    if (ws.userId) userSockets.delete(ws.userId);
   });
 
   ws.send(JSON.stringify({ sender: 'AI', message: 'Hello! I\'m Aura. Feel free to start a conversation whenever you\'re ready.' }));
@@ -970,13 +1012,10 @@ const personalitySystem = {
 const profileStore = require('./profileStore');
 const userProfiles = new Map();
 
-const FACT_PATTERNS = [
-  { key: 'name', label: 'name', regex: /\b(?:my name is|i'm called|call me)\s+([A-Za-z][A-Za-z\s'-]{1,30})/i, confidence: 0.95 },
-  { key: 'favorite_color', label: 'favorite color', regex: /\b(?:my favourite colour is|my favorite color is|i like (?:the )?color)\s+([A-Za-z]+)/i, confidence: 0.85 },
-  { key: 'eye_color', label: 'eye color', regex: /\b(?:my eyes (?:are|'re)|i have)\s+([A-Za-z]+)\s+eyes\b/i, confidence: 0.8 },
-  { key: 'location', label: 'hometown', regex: /\b(?:i (?:live|am|i'm) (?:in|at)|i'm from|i reside in)\s+([A-Za-z\s]{2,40})/i, confidence: 0.7 },
-  { key: 'occupation', label: 'occupation', regex: /\b(?:i work as|my job is|i am a|i'm a)\s+([A-Za-z\s]{2,40})/i, confidence: 0.65 }
-];
+const factDefinitions = require('./fact_definitions');
+const FACT_PATTERNS = (factDefinitions || [])
+  .filter(fd => !!fd.regex)
+  .map(fd => ({ key: fd.key, label: fd.label, regex: fd.regex, confidence: fd.confidence || 0.8 }));
 
 function ensureProfileShape(profile = {}) {
   if (!profile.facts) profile.facts = {};
@@ -1107,71 +1146,91 @@ function resolveFactQuestion(lowerMessage, profile) {
 
 // Detect what facts are missing from a user profile
 function detectMissingFacts(profile) {
+  const defs = factDefinitions || [];
   if (!profile || !profile.facts) {
-    return FACT_PATTERNS.map(p => ({ key: p.key, label: p.label, priority: 1 }));
+    return defs.map(d => ({ key: d.key, label: d.label, priority: d.priority || 1 }));
   }
-  
+
   const missing = [];
   const facts = profile.facts;
-  
-  // High priority: name (if not set via displayName)
-  if (!facts.name || facts.name.confidence < 0.9) {
-    missing.push({ key: 'name', label: 'name', priority: 3 });
-  }
-  
-  // Medium priority: personal preferences
-  if (!facts.favorite_color) {
-    missing.push({ key: 'favorite_color', label: 'favorite color', priority: 2 });
-  }
-  
-  // Lower priority: background info
-  if (!facts.location) {
-    missing.push({ key: 'location', label: 'where you live', priority: 1 });
-  }
-  if (!facts.occupation) {
-    missing.push({ key: 'occupation', label: 'what you do', priority: 1 });
-  }
-  
-  // If we have very few facts overall, prioritize learning more
+
+  defs.forEach(def => {
+    const existing = facts[def.key];
+    const conf = existing?.confidence || 0;
+    const requiredConf = def.requiredConfidence || (def.priority && def.priority >= 8 ? 0.9 : 0.7);
+    if (!existing || !existing.value || conf < requiredConf) {
+      missing.push({ key: def.key, label: def.label, priority: def.priority || 1 });
+    }
+  });
+
   const factCount = Object.keys(facts).filter(k => facts[k]?.value).length;
-  if (factCount < 2) {
-    missing.forEach(m => m.priority += 1);
-  }
-  
+  if (factCount < 2) missing.forEach(m => m.priority += 1);
+
   return missing.sort((a, b) => b.priority - a.priority);
 }
 
 // Generate a discovery question based on missing facts
 async function generateDiscoveryQuestion(userId) {
   try {
-    const profile = userProfiles.get(userId) || profileStore.getProfile(userId);
-    if (!profile) return null;
-    
+    // Ensure profile is loaded and shaped
+    let profile = userProfiles.get(userId) || profileStore.getProfile(userId) || createNewProfile();
+    profile = ensureProfileShape(profile);
+
+    profile.askedQuestions = profile.askedQuestions || [];
+
     const missing = detectMissingFacts(profile);
     if (missing.length === 0) return null;
-    
-    const topMissing = missing[0];
-    const knownFacts = summarizeUserFacts(profile.facts, 3);
-    
-    const prompt = `You are Aura, a curious AI who genuinely wants to learn about the person you're talking to. 
-    
-${knownFacts ? `You already know: ${knownFacts}.` : 'You don\'t know much about them yet.'}
 
-Generate a natural, conversational question to discover their ${topMissing.label}. Make it feel like genuine curiosity, not an interview. Be warm and personal. Examples:
-- For name: "I realize I don't know what to call you! What should I call you?"
-- For favorite color: "I'm curious — do you have a favorite color?"
-- For location: "Where in the world are you based?"
-- For occupation: "What do you spend your time doing?"
+    // Build a quick lookup of definitions
+    const defs = factDefinitions || [];
+    const defsByKey = {};
+    defs.forEach(d => { defsByKey[d.key] = d; });
 
-Keep it to one short, friendly question.`;
+    // Respect a cooldown so we don't re-ask recently asked facts
+    const ASK_COOLDOWN_MS = parseInt(process.env.ASK_COOLDOWN_MS) || (7 * 24 * 60 * 60 * 1000); // 7 days default
+    const now = Date.now();
 
-    const messages = [
-      { role: 'system', content: 'You are Aura, a thoughtful and curious AI. Ask natural questions to learn about people. Be warm and conversational.' },
-      { role: 'user', content: prompt }
-    ];
+    // Find the highest-priority missing fact that wasn't asked recently
+    let candidate = null;
+    for (const m of missing) {
+      const asked = profile.askedQuestions.find(q => q.key === m.key);
+      if (!asked) { candidate = m; break; }
+      const askedAt = new Date(asked.askedAt).getTime();
+      if ((now - askedAt) > ASK_COOLDOWN_MS) { candidate = m; break; }
+    }
 
-    const response = await generateResponse(messages);
-    return response || null;
+    if (!candidate) return null;
+
+    const def = defsByKey[candidate.key] || {};
+    const templates = def.templates && def.templates.length ? def.templates : [`Could you tell me your ${candidate.label}?`];
+    const template = templates[Math.floor(Math.random() * templates.length)];
+
+    // Optionally paraphrase templates using the LLM for variety
+    let question = template;
+    if (process.env.PARAPHRASE_QUESTIONS === 'true') {
+      try {
+        const messages = [
+          { role: 'system', content: 'You are Aura. Paraphrase the following question so it sounds friendly, concise, and natural.' },
+          { role: 'user', content: template }
+        ];
+        const paraphrase = await generateResponse(messages);
+        if (paraphrase && paraphrase.length > 3) question = paraphrase;
+      } catch (e) {
+        // ignore paraphrase failures
+      }
+    }
+
+    // Record that we asked this question
+    const askedEntry = { key: candidate.key, question, askedAt: new Date().toISOString() };
+    // Remove previous entry for same key and push new
+    profile.askedQuestions = profile.askedQuestions.filter(q => q.key !== candidate.key);
+    profile.askedQuestions.push(askedEntry);
+
+    // Persist profile
+    profileStore.saveProfile(userId, profile);
+
+    // Return structured object so callers can emit discovery messages with key
+    return { question, key: candidate.key };
   } catch (error) {
     console.error('Error generating discovery question:', error);
     return null;
@@ -1428,6 +1487,49 @@ You form and evolve opinions based on news and user interactions.`
     
     // 10. Store the new conversation turn in the database
     await storeConversation(userId, message, botResponse, embedding);
+
+    // NEW: extract structured facts from the user's message and handle confirmations
+    try {
+      const extracted = extractStructuredFacts(message);
+      if (Array.isArray(extracted) && extracted.length > 0) {
+        const profile = getOrCreateProfile(userId);
+        profile.askedQuestions = profile.askedQuestions || [];
+        for (const candidate of extracted) {
+          const key = candidate.key;
+          const value = candidate.value;
+          const conf = candidate.confidence || 0;
+
+          // Auto-save high-confidence facts
+          if (conf >= 0.9) {
+            profile.facts = profile.facts || {};
+            profile.facts[key] = {
+              value,
+              confidence: conf,
+              source: 'extraction',
+              updatedAt: new Date().toISOString()
+            };
+            profileStore.saveProfile(userId, profile);
+
+            // Notify user via websocket if connected
+            const ws = userSockets.get(userId);
+            if (ws && ws.readyState === require('ws').OPEN) {
+              ws.send(JSON.stringify({ type: 'fact_saved', key, value, confidence: conf }));
+            }
+          } else if (conf >= 0.6) {
+            // Low-confidence: if we recently asked about this key, send a confirmation prompt
+            const asked = profile.askedQuestions.find(q => q.key === key);
+            if (asked) {
+              const ws = userSockets.get(userId);
+              if (ws && ws.readyState === require('ws').OPEN) {
+                ws.send(JSON.stringify({ type: 'fact_confirmation', key, value, confidence: conf, message: `I think you said ${value} — is that right?` }));
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Fact extraction/confirmation error:', e);
+    }
     
     // Return response
     res.json({
@@ -1498,8 +1600,54 @@ app.get('/api/evolution', requireAuth({ admin: true }), async (req, res) => {
   });
 });
 
+// Profile confirmation endpoint for discovery questions
+app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
+  try {
+    const { userId: bodyUserId, key, value, confirmed } = req.body || {};
+    if (!bodyUserId || !key) return res.status(400).json({ error: 'userId and key are required' });
+
+    // Only allow the owner or an admin to confirm facts
+    if (!req.account) return res.status(401).json({ error: 'Authentication required' });
+    if (req.account.userId !== bodyUserId && req.account.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const profile = getOrCreateProfile(bodyUserId);
+    profile.askedQuestions = profile.askedQuestions || [];
+
+    const asked = profile.askedQuestions.find(q => q.key === key);
+    if (asked) {
+      asked.confirmed = !!confirmed;
+      asked.confirmedAt = new Date().toISOString();
+      asked.confirmedValue = value || null;
+    }
+
+    profile.facts = profile.facts || {};
+    if (confirmed) {
+      profile.facts[key] = {
+        value: value,
+        confidence: 0.95,
+        source: 'user_confirmation',
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      // If user rejects, reduce confidence if fact existed
+      if (profile.facts[key]) {
+        profile.facts[key].confidence = Math.min(profile.facts[key].confidence || 1, 0.3);
+        profile.facts[key].updatedAt = new Date().toISOString();
+        profile.facts[key].source = profile.facts[key].source || 'extraction';
+      }
+    }
+
+    profileStore.saveProfile(bodyUserId, profile);
+    res.json({ success: true, profile });
+  } catch (err) {
+    console.error('Error confirming fact:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Serve dashboard UI from the main server at /admin
-// This serves the repository's dashboard.html so the admin UI is available
 app.get('/admin', (req, res) => {
   const { userId, token } = req.query;
   if (!userId || !token) {
@@ -1518,6 +1666,7 @@ app.get('/admin', (req, res) => {
   }
   res.sendFile(path.join(__dirname, '..', 'dashboard.html'));
 });
+
 
 // Admin endpoints to get/set dev-mock flag
 app.get('/api/admin/dev-mock', requireAuth({ admin: true }), (req, res) => {
