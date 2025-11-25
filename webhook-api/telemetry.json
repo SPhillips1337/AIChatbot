@@ -1,0 +1,19 @@
+[
+  {
+    "timestamp": "2025-11-25T10:01:07.858Z",
+    "type": "fact_suggested",
+    "userId": "2351d788-4fb9-4dcf-88a1-56f63e06f649",
+    "key": "preferred_contact_time",
+    "value": "morning",
+    "confidence": 0.8729348620073868,
+    "source": "embedding_match"
+  },
+  {
+    "timestamp": "2025-11-25T10:01:17.010Z",
+    "type": "fact_confirmed",
+    "userId": "2351d788-4fb9-4dcf-88a1-56f63e06f649",
+    "key": "preferred_contact_time",
+    "value": "morning",
+    "source": "user_confirmation"
+  }
+]

@@ -160,6 +160,25 @@
             <h3>Recent Activity</h3>
             <div id="activity-list">Loading...</div>
         </div>
+
+        <div class="card">
+            <h3>Telemetry (Admin)</h3>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+                <label style="font-size:0.9em;">Limit:</label>
+                <input id="telemetryLimit" type="number" value="200" min="1" max="10000" style="width:90px; padding:6px 8px; border-radius:4px; border:1px solid #ccc;">
+                <label style="font-size:0.9em;">Type:</label>
+                <select id="telemetryTypeFilter" style="padding:6px 8px; border-radius:4px; border:1px solid #ccc;">
+                    <option value="">(all)</option>
+                    <option value="fact_autosave">fact_autosave</option>
+                    <option value="fact_suggested">fact_suggested</option>
+                    <option value="fact_confirmed">fact_confirmed</option>
+                    <option value="fact_rejected">fact_rejected</option>
+                    <option value="fact_deleted">fact_deleted</option>
+                </select>
+                <button class="refresh-btn" onclick="loadTelemetry()">Load Telemetry</button>
+            </div>
+            <div id="telemetry-list" style="max-height:360px; overflow:auto;">Loading...</div>
+        </div>
     </div>
 
     <script>
@@ -259,6 +278,44 @@
         
         // Auto-refresh every 30 seconds
         setInterval(loadDashboard, 30000);
+
+        // Telemetry
+        async function loadTelemetry() {
+            const limitEl = document.getElementById('telemetryLimit');
+            const typeEl = document.getElementById('telemetryTypeFilter');
+            const out = document.getElementById('telemetry-list');
+            out.innerHTML = 'Loading...';
+            try {
+                const limit = parseInt(limitEl.value, 10) || 200;
+                const res = await authedFetch(`/api/admin/telemetry?limit=${limit}`);
+                if (!res.ok) {
+                    out.innerHTML = '<p style="color:red;">Failed to load telemetry</p>';
+                    return;
+                }
+                const body = await res.json();
+                const events = body.events || [];
+                const typeFilter = (typeEl.value || '').trim();
+                const filtered = typeFilter ? events.filter(e => e.type === typeFilter) : events;
+                if (!filtered.length) {
+                    out.innerHTML = '<p>No telemetry events</p>';
+                    return;
+                }
+                const html = filtered.map(ev => `
+                    <div style="border-bottom:1px solid #eee;padding:8px 6px;">
+                        <div style="font-size:0.9em;color:#333;"><strong>${ev.type}</strong> ${ev.key ? ' — ' + ev.key : ''} ${ev.userId ? '<span style="color:#6c757d;">user:'+ev.userId+'</span>' : ''}</div>
+                        <div style="font-size:0.9em;color:#555;margin-top:4px;">${JSON.stringify(ev.payload || ev, null, 2).replace(/\n/g,'<br/>')}</div>
+                        <div class="timestamp">${new Date(ev.timestamp).toLocaleString()}</div>
+                    </div>
+                `).join('');
+                out.innerHTML = html;
+            } catch (e) {
+                console.error('Error loading telemetry:', e);
+                out.innerHTML = '<p style="color:red;">Error loading telemetry</p>';
+            }
+        }
+
+        // Load telemetry on page load as well
+        setTimeout(loadTelemetry, 1000);
 
         // Delete news function
         async function deleteNews(newsId) {

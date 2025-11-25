@@ -20,6 +20,7 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - Inline, non-modal confirmation flow for mid-confidence facts (WebSocket-driven) and a `POST /api/profile/confirm-fact` endpoint to accept/reject facts.
 - In-chat Profile UI to view and remove stored facts (`/api/profile/remove-fact`).
 - WebSocket auth binding so server can target messages to specific users (client sends `{ type: 'auth', userId, token }` on WS connect).
+- Telemetry collection for fact autosave/suggestion/confirm/reject/delete events and a secure admin telemetry endpoint `/api/admin/telemetry` plus a small telemetry UI on the admin dashboard.
 
 ## Components
 
@@ -46,6 +47,7 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - Structured fact extraction and discovery questions (definition-driven)
 - Embedding-backed semantic matching for paraphrase handling
 - Inline confirmation flow and a small profile UI for reviewing/removing facts
+- Telemetry collection and admin telemetry UI for tuning and analysis
 
 ## Getting Started
 
@@ -88,6 +90,11 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 
 4.  **Open the chat UI:** `https://aura.happymonkey.ai/chat` (or `http://localhost:4002/chat`)
 
+## Telemetry
+- Telemetry events are recorded in `webhook-api/telemetry.json` and include events such as `fact_autosave`, `fact_suggested`, `fact_confirmed`, `fact_rejected`, and `fact_deleted`.
+- Admins can fetch recent events via the secure endpoint `GET /api/admin/telemetry?limit=N` (admin auth required).
+- The dashboard includes a small telemetry UI to inspect recent events and filter by type.
+
 ## WebSocket message types (server → client)
 - `proactive_message` — general proactive thought
 - `discovery_question` — structured discovery question `{ key, message }`
@@ -100,6 +107,7 @@ Client should send an initial WS auth frame on connect: `{ type: 'auth', userId,
 - `/api/chat` (POST) — Main conversational endpoint
 - `/api/profile/confirm-fact` (POST) — Confirm/reject a candidate fact
 - `/api/profile/remove-fact` (POST) — Remove a stored fact (auth required)
+- `/api/admin/telemetry` (GET) — Fetch recent telemetry events (admin only)
 - `/api/users/:userId/profile` (GET) — Inspect persisted profile data
 - Other admin endpoints for dev-mock, news processing, dashboard, etc.
 
@@ -124,16 +132,17 @@ AURAaichatbot/
 │   ├── news-processor.js      # News analysis and mood system
 │   ├── news-data.json         # Mood state persistence
 │   ├── profile.json           # Profile store (persisted)
+│   ├── telemetry.json         # Recent telemetry events (persisted)
 │   └── package.json
 ├── docker-compose.yml         # Docker services configuration
 └── README.md
 ```
 
 ## Next steps
-- Add telemetry to track confirm/auto-save rates
+- Aggregate telemetry and provide per-fact metrics
 - Admin UI for tuning thresholds and fact priorities
 - Privacy consent flows for high-sensitivity facts
 
 ---
 
-If you'd like, I can update the README with deployment examples for popular embedding providers or add a short troubleshooting section for common errors (embedding failures, WebSocket bind issues).
+If you'd like, I can add CSV export to the dashboard telemetry UI or implement aggregation counts per fact key. Which would you like next?

@@ -1010,6 +1010,7 @@ const personalitySystem = {
 
 // User personality tracking
 const profileStore = require('./profileStore');
+const telemetryStore = require('./telemetryStore');
 const userProfiles = new Map();
 
 const factDefinitions = require('./fact_definitions');
@@ -1549,6 +1550,9 @@ You form and evolve opinions based on news and user interactions.`
             };
             profileStore.saveProfile(userId, profile);
 
+            // Telemetry: record auto-save from extraction
+            try { telemetryStore.appendEvent({ type: 'fact_autosave', userId, key, value, confidence: conf, source: 'extraction' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
+
             // Notify user via websocket if connected
             const ws = userSockets.get(userId);
             if (ws && ws.readyState === require('ws').OPEN) {
@@ -1558,6 +1562,9 @@ You form and evolve opinions based on news and user interactions.`
             // Low-confidence: if we recently asked about this key, send a confirmation prompt
             const asked = profile.askedQuestions.find(q => q.key === key);
             if (asked) {
+              // Telemetry: record suggestion event
+              try { telemetryStore.appendEvent({ type: 'fact_suggested', userId, key, value, confidence: conf, source: 'extraction' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
+
               const ws = userSockets.get(userId);
               if (ws && ws.readyState === require('ws').OPEN) {
                 ws.send(JSON.stringify({ type: 'fact_confirmation', key, value, confidence: conf, message: `I think you said ${value} — is that right?` }));
@@ -1591,12 +1598,19 @@ You form and evolve opinions based on news and user interactions.`
               updatedAt: new Date().toISOString()
             };
             profileStore.saveProfile(userId, profile);
+
+            // Telemetry: record auto-save from embedding matcher
+            try { telemetryStore.appendEvent({ type: 'fact_autosave', userId, key, value, confidence: 0.95, source: 'embedding_match', similarity: sim }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
+
             const ws = userSockets.get(userId);
             if (ws && ws.readyState === require('ws').OPEN) {
               ws.send(JSON.stringify({ type: 'fact_saved', key, value, confidence: 0.95 }));
             }
           } else if (sim >= parseFloat(process.env.EMBED_CONFIRM_SIM || '0.78')) {
             // mid-confidence -> ask for inline confirmation
+            // Telemetry: record suggestion from embedding matcher
+            try { telemetryStore.appendEvent({ type: 'fact_suggested', userId, key, value, confidence: sim, source: 'embedding_match' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
+
             const ws = userSockets.get(userId);
             if (ws && ws.readyState === require('ws').OPEN) {
               ws.send(JSON.stringify({ type: 'fact_confirmation', key, value, confidence: sim, message: `I think you meant ${value} — is that correct?` }));
@@ -1707,7 +1721,13 @@ app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
         source: 'user_confirmation',
         updatedAt: new Date().toISOString()
       };
+
+      // Telemetry: record that user confirmed a fact
+      try { telemetryStore.appendEvent({ type: 'fact_confirmed', userId: bodyUserId, key, value, source: 'user_confirmation' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
     } else {
+      // Telemetry: record that user rejected a fact
+      try { telemetryStore.appendEvent({ type: 'fact_rejected', userId: bodyUserId, key, value: value || null }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
+
       // If user rejects, reduce confidence if fact existed
       if (profile.facts[key]) {
         profile.facts[key].confidence = Math.min(profile.facts[key].confidence || 1, 0.3);
@@ -1738,8 +1758,11 @@ app.post('/api/profile/remove-fact', requireAuth(), (req, res) => {
     const profile = getOrCreateProfile(bodyUserId);
     profile.facts = profile.facts || {};
     if (profile.facts[key]) {
+      const old = profile.facts[key];
       delete profile.facts[key];
       profileStore.saveProfile(bodyUserId, profile);
+      // Telemetry: record deletion
+      try { telemetryStore.appendEvent({ type: 'fact_deleted', userId: bodyUserId, key, oldValue: old.value || null }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
       return res.json({ success: true, profile });
     }
     return res.status(404).json({ error: 'Fact not found' });
@@ -1784,6 +1807,18 @@ app.post('/api/admin/dev-mock', requireAuth({ admin: true }), (req, res) => {
   } catch (e) {
     console.error('Failed to set DEV_MOCK:', e.message);
     res.status(500).json({ error: 'Failed to set dev mock' });
+  }
+});
+
+// Admin telemetry endpoint - admin only
+app.get('/api/admin/telemetry', requireAuth({ admin: true }), (req, res) => {
+  try {
+    const limit = Math.min(10000, Math.max(1, parseInt(req.query.limit) || 200));
+    const events = telemetryStore.listEvents(limit);
+    res.json({ success: true, events });
+  } catch (err) {
+    console.error('Error fetching telemetry:', err);
+    res.status(500).json({ error: 'Failed to fetch telemetry' });
   }
 });
 
