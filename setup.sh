@@ -8,7 +8,8 @@ echo "Creating directories..."
 mkdir -p docker/data/qdrant
 mkdir -p docker/data/models
 mkdir -p docker/data/embeddings
-mkdir -p docker/data/n8n
+# Skipping n8n data directory creation (n8n workflows archived)
+# mkdir -p docker/data/n8n
 mkdir -p webhook-api/thoughts
 
 # Check if GoogleNews vectors file exists

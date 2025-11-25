@@ -542,6 +542,7 @@
             cleanupLegacyIdentity();
             await ensureIdentity();
             updateGreeting(displayName);
+            if (window.updateSwitchProfileLink) window.updateSwitchProfileLink();
 
             function initializeWebSocket() {
                 statusDiv.textContent = 'Connecting...';
@@ -818,7 +819,6 @@
                     sendMessage();
                 }
             });
-        });
 
         // Menu functions
         async function checkMood() {
@@ -953,6 +953,7 @@
             userRole = 'user';
             authToken = null;
             updateMenuVisibility();
+            if (window.updateSwitchProfileLink) window.updateSwitchProfileLink();
         }
 
         function ensureIdentity() {
@@ -1093,27 +1094,74 @@
                     submitBtn.textContent = 'Continue';
                 }
 
-                submitBtn.addEventListener('click', handleSubmit);
-                usernameInput.addEventListener('keypress', handleKey);
-                passwordInput.addEventListener('keypress', handleKey);
-                confirmInput.addEventListener('keypress', handleKey);
+submitBtn.addEventListener('click', handleSubmit);
+                        usernameInput.addEventListener('keypress', handleKey);
+                        passwordInput.addEventListener('keypress', handleKey);
+                        confirmInput.addEventListener('keypress', handleKey);
 
-                setMode(mode);
-            });
-        }
-
-        const switchProfileLink = document.getElementById('switchProfileLink');
-        if (switchProfileLink) {
-            switchProfileLink.addEventListener('click', async (event) => {
-                event.preventDefault();
-                clearAuth();
-                const menuLinks = document.getElementById('menuLinks');
-                if (menuLinks) {
-                    menuLinks.classList.remove('open');
+                        setMode(mode);
+                    });
                 }
-                await openAuthModal();
+
+                const switchProfileLink = document.getElementById('switchProfileLink');
+                if (switchProfileLink) {
+                    switchProfileLink.addEventListener('click', async (event) => {
+                        event.preventDefault();
+                        const menuLinks = document.getElementById('menuLinks');
+                        if (menuLinks) menuLinks.classList.remove('open');
+
+                        // If already logged in, treat as logout action
+                        if (userId) {
+                            const doLogout = confirm('Log out of this profile?');
+                            if (!doLogout) return;
+                            // Close websocket if open
+                            try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch (e) { /* ignore */ }
+                            clearAuth();
+                            // Optionally open auth modal to allow quick re-login/switch
+                            await openAuthModal();
+                            return;
+                        }
+
+                        // Not logged in -> open login/register modal
+                        await openAuthModal();
+                    });
+                }
+
+                // Update the switch profile link label based on auth state
+                window.updateSwitchProfileLink = function() {
+                    const el = document.getElementById('switchProfileLink');
+                    if (!el) return;
+                    if (userId) {
+                        el.textContent = '🔐 Logout';
+                        el.classList.remove('danger');
+                    } else {
+                        el.textContent = '🔐 Switch Profile';
+                        el.classList.add('danger');
+                    }
+                };
+
+                // Register switch profile click handler (inside DOMContentLoaded so `ws` is available)
+                (function() {
+                    const link = document.getElementById('switchProfileLink');
+                    if (!link) return;
+                    link.addEventListener('click', async (event) => {
+                        event.preventDefault();
+                        const menuLinks = document.getElementById('menuLinks');
+                        if (menuLinks) menuLinks.classList.remove('open');
+
+                        if (userId) {
+                            if (!confirm('Log out of this profile?')) return;
+                            try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch (e) { /* ignore */ }
+                            clearAuth();
+                            await openAuthModal();
+                            return;
+                        }
+
+                        await openAuthModal();
+                    });
+                })();
             });
-        }
+
     </script>
 
 </body>
