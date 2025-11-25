@@ -548,84 +548,127 @@
                 statusDiv.textContent = 'Connecting...';
                 statusDiv.style.color = '#666';
                 const wsBase = API_BASE.replace(/^http/, 'ws');
-                ws = new WebSocket(wsBase);
                 const ACTIVITY_THROTTLE_MS = 15000;
                 let lastActivityPing = 0;
+                let keepaliveInterval = null;
+                // Exponential backoff state for reconnects
+                let reconnectBackoff = 1000;
+                const MAX_BACKOFF = 30000;
 
                 function notifyUserActivity(force = false, reason = 'activity') {
                     if (!ws || ws.readyState !== WebSocket.OPEN) return;
                     const now = Date.now();
                     if (!force && (now - lastActivityPing) < ACTIVITY_THROTTLE_MS) return;
-                    ws.send(JSON.stringify({ type: 'user_activity', reason }));
+                    try {
+                        ws.send(JSON.stringify({ type: 'user_activity', reason }));
+                    } catch (e) {
+                        // swallow send errors during reconnects
+                    }
                     lastActivityPing = now;
                 }
 
-                ws.onopen = () => {
-                    statusDiv.textContent = 'Connected';
-                    statusDiv.style.color = '#28a745';
-                    notifyUserActivity(true, 'connected');
-                    // Send auth binding for this websocket so server can target messages
+                // Connect (and reconnect) logic
+                function connect() {
                     try {
-                        if (userId && authToken) {
-                            ws.send(JSON.stringify({ type: 'auth', userId: userId, token: authToken }));
-                        } else if (userId) {
-                            ws.send(JSON.stringify({ type: 'auth', userId: userId }));
-                        }
-                    } catch (e) {
-                        console.warn('WS auth send failed', e);
+                        ws = new WebSocket(wsBase);
+                    } catch (err) {
+                        console.error('Failed to create WebSocket:', err);
+                        scheduleReconnect();
+                        return;
                     }
-                };
 
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
+                    ws.onopen = () => {
+                        statusDiv.textContent = 'Connected';
+                        statusDiv.style.color = '#28a745';
+                        notifyUserActivity(true, 'connected');
 
-                        if (data.type === 'proactive_message' && data.message) {
-                            addMessage('AI', data.message);
-                            return;
+                        // Send auth binding for this websocket so server can target messages
+                        try {
+                            if (userId && authToken) {
+                                ws.send(JSON.stringify({ type: 'auth', userId: userId, token: authToken }));
+                            } else if (userId) {
+                                ws.send(JSON.stringify({ type: 'auth', userId: userId }));
+                            }
+                        } catch (e) {
+                            console.warn('WS auth send failed', e);
                         }
 
-                        if (data.type === 'discovery_question' && data.message) {
-                            addDiscoveryMessage(data.key, data.message);
-                            return;
+                        // reset reconnect backoff
+                        reconnectBackoff = 1000;
+
+                        // start a keepalive ping so reverse proxies don't drop idle sockets
+                        if (keepaliveInterval) clearInterval(keepaliveInterval);
+                        keepaliveInterval = setInterval(() => {
+                            try {
+                                if (ws && ws.readyState === WebSocket.OPEN) {
+                                    ws.send(JSON.stringify({ type: 'user_activity', reason: 'keepalive' }));
+                                }
+                            } catch (e) { /* ignore */ }
+                        }, 45000);
+                    };
+
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+
+                            if (data.type === 'proactive_message' && data.message) {
+                                addMessage('AI', data.message);
+                                return;
+                            }
+
+                            if (data.type === 'discovery_question' && data.message) {
+                                addDiscoveryMessage(data.key, data.message);
+                                return;
+                            }
+
+                            if (data.type === 'fact_confirmation') {
+                                // server suggests a value and asks user to confirm
+                                addFactConfirmation(data.key, data.value, data.message || `I think you said ${data.value} — is that right?`, data.confidence);
+                                return;
+                            }
+
+                            if (data.type === 'fact_saved') {
+                                // Inform user a fact was saved
+                                addMessage('AI', `Saved: ${data.key} — ${data.value}`);
+                                return;
+                            }
+
+                            if (data.sender && data.message) {
+                                addMessage(data.sender, data.message);
+                                return;
+                            }
+                        } catch (error) {
+                            console.error('Error parsing WebSocket message:', error);
                         }
+                    };
 
-                        if (data.type === 'fact_confirmation') {
-                            // server suggests a value and asks user to confirm
-                            addFactConfirmation(data.key, data.value, data.message || `I think you said ${data.value} — is that right?`, data.confidence);
-                            return;
-                        }
+                    ws.onclose = () => {
+                        statusDiv.textContent = 'Disconnected. Reconnecting...';
+                        statusDiv.style.color = '#dc3545';
+                        if (keepaliveInterval) { clearInterval(keepaliveInterval); keepaliveInterval = null; }
+                        scheduleReconnect();
+                    };
 
-                        if (data.type === 'fact_saved') {
-                            // Inform user a fact was saved
-                            addMessage('AI', `Saved: ${data.key} — ${data.value}`);
-                            return;
-                        }
+                    ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        statusDiv.textContent = 'Connection Error';
+                        statusDiv.style.color = '#dc3545';
+                    };
+                }
 
-                        if (data.sender && data.message) {
-                            addMessage(data.sender, data.message);
-                            return;
-                        }
-                    } catch (error) {
-                        console.error('Error parsing WebSocket message:', error);
-                    }
-                };
+                function scheduleReconnect() {
+                    const delay = Math.min(reconnectBackoff, MAX_BACKOFF);
+                    console.log(`Reconnecting WebSocket in ${delay}ms`);
+                    setTimeout(() => {
+                        reconnectBackoff = Math.min(MAX_BACKOFF, Math.floor(reconnectBackoff * 1.5));
+                        connect();
+                    }, delay);
+                }
 
-                ws.onclose = () => {
-                    statusDiv.textContent = 'Disconnected. Please refresh.';
-                    statusDiv.style.color = '#dc3545';
-                };
-
-                ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    statusDiv.textContent = 'Connection Error';
-                    statusDiv.style.color = '#dc3545';
-                };
-
-                // Activity listeners
+                // Bind activity listeners once (they reference the current `ws` variable)
                 messageInput.addEventListener('keydown', () => {
-                    if (ws.readyState === WebSocket.OPEN && !isTyping) {
-                        ws.send(JSON.stringify({ type: 'user_typing' }));
+                    if (ws && ws.readyState === WebSocket.OPEN && !isTyping) {
+                        try { ws.send(JSON.stringify({ type: 'user_typing' })); } catch (e) { /* ignore */ }
                         isTyping = true;
                     }
                     notifyUserActivity(true, 'input_keydown');
@@ -639,6 +682,9 @@
                 ['mousemove', 'click', 'touchstart'].forEach(eventName => {
                     document.addEventListener(eventName, () => notifyUserActivity(false, eventName), { passive: true });
                 });
+
+                // Start initial connection
+                connect();
             }
 
             initializeWebSocket();
