@@ -73,8 +73,8 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 
 1.  **Clone this repository:**
     ```bash
-    git clone https://github.com/username/AURAaichatbot.git
-    cd AURAaichatbot
+    git clone https://github.com/SPhillips1337/AIChatbot.git
+    cd AIChatbot
     cd webhook-api && npm install
     ```
 
@@ -88,7 +88,7 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
     PORT=4002 node webhook-api/server.js
     ```
 
-4.  **Open the chat UI:** `https://aura.happymonkey.ai/chat` (or `http://localhost:4002/chat`)
+4.  **Open the chat UI:** `https://localhost/chat` (or `http://localhost:4002/chat`)
 
 ## Telemetry
 - Telemetry events are recorded in `webhook-api/telemetry.json` and include events such as `fact_autosave`, `fact_suggested`, `fact_confirmed`, `fact_rejected`, and `fact_deleted`.
@@ -123,7 +123,7 @@ Client should send an initial WS auth frame on connect: `{ type: 'auth', userId,
 ## Project Structure
 
 ```
-AURAaichatbot/
+AIChatbot/
 ├── index.html                 # Frontend chat interface
 ├── webhook-api/               # Node.js backend
 │   ├── server.js              # Main API and WebSocket server
