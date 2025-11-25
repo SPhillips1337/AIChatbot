@@ -15,12 +15,17 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 5.  **News Processing**: Automated RSS feed processing with emotional analysis and mood tracking.
 
 ## Key Additions (recent)
+
 - Definition-driven structured fact extraction (`webhook-api/fact_definitions.js`).
 - Embedding-backed semantic matcher (`webhook-api/embeddingMatcher.js`) to handle paraphrases and improve recall.
 - Inline, non-modal confirmation flow for mid-confidence facts (WebSocket-driven) and a `POST /api/profile/confirm-fact` endpoint to accept/reject facts.
 - In-chat Profile UI to view and remove stored facts (`/api/profile/remove-fact`).
 - WebSocket auth binding so server can target messages to specific users (client sends `{ type: 'auth', userId, token }` on WS connect).
 - Telemetry collection for fact autosave/suggestion/confirm/reject/delete events and a secure admin telemetry endpoint `/api/admin/telemetry` plus a small telemetry UI on the admin dashboard.
+- Improved WebSocket client resilience: automatic reconnect with exponential backoff and keepalive pings to survive reverse proxies (updated `index.html`).
+- News processing reliability improvements: news selection is now sorted by `payload.timestamp` and the processor logs the news items chosen for LLM prompts (`webhook-api/news-processor.js`).
+- Minor bugfixes and logging improvements to help diagnose disconnects and news freshness issues.
+
 
 ## Components
 

@@ -12,6 +12,16 @@ This update captures the recent implementation work for structured facts, embedd
 - Added server-side handling to auto-save high-confidence extractions and to prompt inline confirmations for mid-confidence matches.
 - Added in-chat Profile UI and server endpoint `POST /api/profile/remove-fact` to allow users to view and remove stored facts.
 - Implemented telemetry collection (`webhook-api/telemetry.json` + `telemetryStore`) and a secure admin endpoint `GET /api/admin/telemetry` plus a small telemetry UI on the admin dashboard.
+- Improved frontend WebSocket reliability: `index.html` now includes automatic reconnect with exponential backoff and periodic keepalive pings to reduce reverse-proxy disconnects.
+- Fixed news-influenced thought selection to use the most recent Qdrant news entries (sorted by `payload.timestamp`) and added selection logging for easier debugging (`webhook-api/news-processor.js`).
+
+## Short-term plan (next sprint)
+1. Tune thresholds: adjust `EMBED_AUTO_SAVE_SIM`, `EMBED_CONFIRM_SIM`, and extraction confidence thresholds based on telemetry.
+2. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
+3. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
+4. Harden authentication checks and ensure all profile mutations require proper `X-User-Id` / `X-Auth-Token` headers.
+5. Add a small admin debug endpoint to preview which news items will be used for the next news-influenced thought (preview only, admin-only).
+6. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
 
 ## Short-term plan (next sprint)
 1. Tune thresholds: adjust `EMBED_AUTO_SAVE_SIM`, `EMBED_CONFIRM_SIM`, and extraction confidence thresholds based on telemetry.

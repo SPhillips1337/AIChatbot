@@ -2,7 +2,7 @@
   "project": {
     "name": "PHPaibot",
     "description": "A proactive PHP chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
-    "version": "0.6.0",
+    "version": "0.6.1",
     "repository": "https://github.com/username/PHPaibot",
     "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API; structured facts, embedding-backed confirmation, inline profile UX, and telemetry implemented"
   },
@@ -169,5 +169,5 @@
     },
     "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock."
   },
-  "lastUpdated": "2025-11-24T18:00:00Z"
+  "lastUpdated": "2025-11-25T12:00:00Z"
 }

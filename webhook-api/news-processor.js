@@ -149,38 +149,46 @@ class NewsProcessor {
     }
   }
 
-  async generateNewsInfluencedThought() {
-    try {
-      const recentNews = await this.qdrant.scroll(this.config.collectionName, {
-        filter: { must: [{ key: 'type', match: { value: 'news' } }] },
-        limit: 3,
-        with_payload: true
-      });
+    async generateNewsInfluencedThought() {
+      try {
+        const recentNews = await this.qdrant.scroll(this.config.collectionName, {
+          filter: { must: [{ key: 'type', match: { value: 'news' } }] },
+          limit: 20,
+          with_payload: true
+        });
 
-      if (!recentNews.points || recentNews.points.length === 0) {
+        if (!recentNews.points || recentNews.points.length === 0) {
+          return null;
+        }
+
+        // Sort by payload.timestamp descending to use the most recent items first
+        recentNews.points.sort((a, b) => {
+          const ta = a.payload && a.payload.timestamp ? new Date(a.payload.timestamp).getTime() : 0;
+          const tb = b.payload && b.payload.timestamp ? new Date(b.payload.timestamp).getTime() : 0;
+          return tb - ta;
+        });
+
+        const newsContext = recentNews.points.map(p => p.payload).slice(0, 2);
+        console.log('Selected recent news for thought:', newsContext.map(n => n.title.substring(0, 80)));
+        const moodDesc = this.getMoodDescription();
+        
+        const prompt = `Based on recent news: ${newsContext.map(n => `"${n.title}" (${n.reaction})`).join(', ')}
+        
+        Current mood: ${moodDesc} (${this.moodState.score})
+        
+        Generate a thoughtful observation or reflection about these current events. Make it feel like a natural thought you're sharing, not a question. Start with phrases like "I've been thinking about..." or "Something that strikes me about..." Keep it conversational and reflective.`;
+
+        const messages = [
+          { role: 'system', content: 'You are Aura, an AI that reflects thoughtfully on current events. Share observations, not questions. Be contemplative and natural.' },
+          { role: 'user', content: prompt }
+        ];
+
+        return await this.generateResponse(messages);
+      } catch (error) {
+        console.error('Error generating news-influenced thought:', error.message);
         return null;
       }
-
-      const newsContext = recentNews.points.map(p => p.payload).slice(0, 2);
-      const moodDesc = this.getMoodDescription();
-      
-      const prompt = `Based on recent news: ${newsContext.map(n => `"${n.title}" (${n.reaction})`).join(', ')}
-      
-      Current mood: ${moodDesc} (${this.moodState.score})
-      
-      Generate a thoughtful observation or reflection about these current events. Make it feel like a natural thought you're sharing, not a question. Start with phrases like "I've been thinking about..." or "Something that strikes me about..." Keep it conversational and reflective.`;
-
-      const messages = [
-        { role: 'system', content: 'You are Aura, an AI that reflects thoughtfully on current events. Share observations, not questions. Be contemplative and natural.' },
-        { role: 'user', content: prompt }
-      ];
-
-      return await this.generateResponse(messages);
-    } catch (error) {
-      console.error('Error generating news-influenced thought:', error.message);
-      return null;
     }
-  }
 
   getMoodDescription() {
     if (this.moodState.score > 3) return 'optimistic';
