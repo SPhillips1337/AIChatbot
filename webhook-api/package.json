@@ -1,4 +1,26 @@
 {
+  "name": "aura-ai-chatbot",
+  "version": "2.0.0",
+  "description": "AURA.ai - A proactive AI chatbot with news awareness and personality evolution",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "DEV_MOCK=true node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "echo \"Linting not configured yet\"",
+    "health": "curl -f http://localhost:3000/health || exit 1"
+  },
+  "keywords": [
+    "ai",
+    "chatbot",
+    "websocket",
+    "llm",
+    "embeddings",
+    "news",
+    "personality"
+  ],
+  "author": "AURA.ai Team",
+  "license": "MIT",
   "dependencies": {
     "@qdrant/js-client-rest": "^1.8.2",
     "axios": "^1.6.2",
@@ -7,5 +29,15 @@
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SPhillips1337/AIChatbot.git"
   }
 }

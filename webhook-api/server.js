@@ -1,13 +1,329 @@
 /**
- * PHPaibot Webhook API
+ * AURA.ai Chatbot Server - Refactored Architecture
  * 
- * This server handles requests from the PHP frontend and communicates with
- * the various services (LLM, embeddings, vector database).
- * It also includes a WebSocket server for push-based communication.
+ * This is the refactored version of the original monolithic server.js
+ * It uses a modular architecture with separated concerns and proper error handling.
  */
 
-// Load .env if available (safe try - optional dependency)
-try { require('dotenv').config(); } catch (e) { /* dotenv not installed - skip */ }
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const http = require('http');
+
+// Configuration and middleware
+const config = require('./config');
+const { globalErrorHandler, notFoundHandler, asyncHandler } = require('./middleware/errorHandler');
+const { requireAuth } = require('./middleware/auth');
+
+// Services
+const databaseService = require('./services/database');
+const llmService = require('./services/llm');
+const embeddingService = require('./services/embedding');
+const websocketService = require('./services/websocket');
+
+// Routes
+const authRoutes = require('./routes/auth');
+const chatRoutes = require('./routes/chat');
+const adminRoutes = require('./routes/admin');
+const profileRoutes = require('./routes/profile');
+
+// Legacy dependencies (to be refactored)
+const NewsProcessor = require('./news-processor');
+
+/**
+ * Application Setup
+ */
+class AuraServer {
+  constructor() {
+    this.app = express();
+    this.server = http.createServer(this.app);
+    this.newsProcessor = null;
+    this.initialized = false;
+  }
+
+  /**
+   * Initialize the server
+   */
+  async initialize() {
+    if (this.initialized) return;
+
+    try {
+      console.log('Initializing AURA.ai Server...');
+
+      // Setup middleware
+      this.setupMiddleware();
+
+      // Initialize services
+      await this.initializeServices();
+
+      // Setup routes
+      this.setupRoutes();
+
+      // Setup error handling
+      this.setupErrorHandling();
+
+      // Initialize WebSocket
+      websocketService.initialize(this.server);
+
+      // Setup news processing
+      this.setupNewsProcessor();
+
+      this.initialized = true;
+      console.log('AURA.ai Server initialized successfully');
+
+    } catch (error) {
+      console.error('Failed to initialize server:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Setup Express middleware
+   */
+  setupMiddleware() {
+    // Basic middleware
+    this.app.use(cors());
+    this.app.use(bodyParser.json({ limit: '10mb' }));
+    this.app.use(bodyParser.urlencoded({ extended: true }));
+
+    // Request logging in debug mode
+    if (config.isDebugMode()) {
+      this.app.use((req, res, next) => {
+        console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+        next();
+      });
+    }
+
+    // Request ID middleware
+    this.app.use((req, res, next) => {
+      req.requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      next();
+    });
+  }
+
+  /**
+   * Initialize all services
+   */
+  async initializeServices() {
+    console.log('Initializing services...');
+
+    // Initialize database service
+    await databaseService.initialize();
+
+    // Test other services
+    const llmStatus = await llmService.testConnection();
+    console.log('LLM Service:', llmStatus.message);
+
+    const embeddingStatus = await embeddingService.testConnection();
+    console.log('Embedding Service:', embeddingStatus.message);
+
+    console.log('All services initialized');
+  }
+
+  /**
+   * Setup API routes
+   */
+  setupRoutes() {
+    // Health check endpoint
+    this.app.get('/health', asyncHandler(async (req, res) => {
+      const health = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0',
+        uptime: process.uptime()
+      };
+
+      res.json(health);
+    }));
+
+    // API routes
+    this.app.use('/api/auth', authRoutes);
+    this.app.use('/api/chat', chatRoutes);
+    this.app.use('/api/admin', adminRoutes);
+    this.app.use('/api/profile', profileRoutes);
+
+    // Legacy endpoints for backward compatibility
+    this.setupLegacyEndpoints();
+
+    // Serve static files (chat interface)
+    this.app.use(express.static('../', { 
+      index: 'index.html',
+      dotfiles: 'deny'
+    }));
+
+    // Chat interface route
+    this.app.get('/chat', (req, res) => {
+      res.sendFile('index.html', { root: '../' });
+    });
+
+    // Dashboard route
+    this.app.get('/dashboard', requireAuth({ admin: true }), (req, res) => {
+      res.sendFile('dashboard.html', { root: '../' });
+    });
+  }
+
+  /**
+   * Setup legacy endpoints for backward compatibility
+   */
+  setupLegacyEndpoints() {
+    // Legacy mood endpoint
+    this.app.get('/api/mood', asyncHandler(async (req, res) => {
+      try {
+        const mood = {
+          score: this.newsProcessor?.moodState?.score || 0,
+          description: this.newsProcessor?.getMoodDescription() || 'neutral',
+          topics: this.newsProcessor?.moodState?.topics?.slice(0, 10) || [],
+          timestamp: new Date().toISOString()
+        };
+        res.json(mood);
+      } catch (error) {
+        console.error('Error getting mood:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }));
+
+    // Legacy opinions endpoints (placeholder)
+    this.app.get('/api/opinions', (req, res) => {
+      res.json({ message: 'Opinions system deprecated - use profile system instead' });
+    });
+
+    this.app.get('/api/opinions/:topic', (req, res) => {
+      res.json({ message: 'Opinions system deprecated - use profile system instead' });
+    });
+
+    // Legacy feedback endpoint (placeholder)
+    this.app.post('/api/feedback', (req, res) => {
+      res.json({ message: 'Feedback system deprecated - use chat system instead' });
+    });
+
+    // Legacy users endpoint
+    this.app.get('/api/users', requireAuth({ admin: true }), asyncHandler(async (req, res) => {
+      const accountStore = require('./accountStore');
+      const accounts = accountStore.listAccounts();
+      res.json(accounts);
+    }));
+
+    this.app.get('/api/users/:userId/profile', asyncHandler(async (req, res) => {
+      const profileStore = require('./profileStore');
+      const profile = await profileStore.getProfile(req.params.userId);
+      if (profile) {
+        res.json(profile);
+      } else {
+        res.status(404).json({ message: 'User profile not found' });
+      }
+    }));
+  }
+
+  /**
+   * Setup news processor
+   */
+  setupNewsProcessor() {
+    try {
+      this.newsProcessor = new NewsProcessor(databaseService.client, config.getAll());
+      
+      // Inject dependencies
+      this.newsProcessor.generateResponse = llmService.generateResponse.bind(llmService);
+      this.newsProcessor.generateEmbedding = embeddingService.generateEmbedding.bind(embeddingService);
+
+      console.log('News processor initialized');
+    } catch (error) {
+      console.error('Failed to initialize news processor:', error);
+    }
+  }
+
+  /**
+   * Setup error handling
+   */
+  setupErrorHandling() {
+    // 404 handler
+    this.app.use(notFoundHandler);
+
+    // Global error handler
+    this.app.use(globalErrorHandler);
+
+    // Graceful shutdown handlers
+    this.setupGracefulShutdown();
+  }
+
+  /**
+   * Setup graceful shutdown
+   */
+  setupGracefulShutdown() {
+    const gracefulShutdown = (signal) => {
+      console.log(`Received ${signal}. Starting graceful shutdown...`);
+      
+      this.server.close(() => {
+        console.log('HTTP server closed');
+        
+        // Cleanup WebSocket service
+        websocketService.cleanup();
+        
+        // Clear embedding cache
+        embeddingService.clearCache();
+        
+        console.log('Graceful shutdown completed');
+        process.exit(0);
+      });
+
+      // Force shutdown after 30 seconds
+      setTimeout(() => {
+        console.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+      }, 30000);
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  }
+
+  /**
+   * Start the server
+   */
+  async start() {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    const port = config.get('port');
+    
+    this.server.listen(port, () => {
+      console.log(`🚀 AURA.ai Server running on port ${port}`);
+      console.log(`📱 Chat interface: http://localhost:${port}/chat`);
+      console.log(`📊 Dashboard: http://localhost:${port}/dashboard`);
+      console.log(`🔧 Environment: ${config.get('nodeEnv')}`);
+      console.log(`🤖 Mock mode: ${config.get('devMock') ? 'enabled' : 'disabled'}`);
+    });
+
+    return this.server;
+  }
+
+  /**
+   * Get server instance
+   */
+  getServer() {
+    return this.server;
+  }
+
+  /**
+   * Get Express app
+   */
+  getApp() {
+    return this.app;
+  }
+}
+
+// Create and export server instance
+const server = new AuraServer();
+
+// Start server if this file is run directly
+if (require.main === module) {
+  server.start().catch(error => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}
+
+module.exports = server;
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -713,854 +1029,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
   if (profile) {
     res.json(profile);
   } else {
-    res.status(404).json({ message: 'User profile not found' });
-  }
-});
-
-// API endpoint for all user profiles
-app.get('/api/users', async (req, res) => {
-  const profiles = await profileStore.listProfiles();
-  res.json(profiles);
-});
-
-// API endpoint for deleting news entries
-app.delete('/api/news/:id', requireAuth({ admin: true }), async (req, res) => {
-  try {
-    const pointId = parseInt(req.params.id);
-    await qdrant.delete(config.collectionName, {
-      points: [pointId]
-    });
-    res.json({ success: true, deleted: pointId });
-  } catch (error) {
-    console.error('Error deleting news entry:', error);
-    res.status(500).json({ error: 'Failed to delete entry' });
-  }
-});
-
-// API endpoint for manual news processing (POST)
-app.post('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
-  try {
-    console.log('Manual news processing triggered');
-    await newsProcessor.processNewsFeeds();
-    res.json({ 
-      success: true, 
-      mood: newsProcessor.moodState,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error processing news:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// API endpoint for manual news processing (GET - for browser access)
-app.get('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
-  try {
-    console.log('Manual news processing triggered via GET');
-    await newsProcessor.processNewsFeeds();
-    res.json({ 
-      success: true, 
-      mood: newsProcessor.moodState,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error processing news:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Admin endpoint to reset mood
-app.post('/api/admin/reset-mood', requireAuth({ admin: true }), async (req, res) => {
-  try {
-    newsProcessor.moodState = { score: 0, topics: [] };
-    newsProcessor.saveMoodState();
-    try {
-      fs.writeFileSync(newsProcessor.newsPath, JSON.stringify(newsProcessor.moodState, null, 2));
-    } catch (e) {
-      console.error('Error clearing news-data.json:', e.message);
-      try {
-        const os = require('os');
-        const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
-        fs.writeFileSync(fallbackPath, JSON.stringify(newsProcessor.moodState, null, 2));
-        newsProcessor.newsPath = fallbackPath;
-        console.log('Wrote cleared mood to fallback path:', fallbackPath);
-      } catch (err2) {
-        console.error('Failed to write cleared mood to fallback path:', err2.message);
-      }
-    }
-    res.json({ success: true, mood: newsProcessor.moodState });
-  } catch (err) {
-    console.error('Error resetting mood:', err);
-    res.status(500).json({ error: 'Failed to reset mood' });
-  }
-});
-
-// Admin endpoint to clear news entries (deletes news points from Qdrant and resets mood file)
-app.post('/api/admin/clear-news', requireAuth({ admin: true }), async (req, res) => {
-  try {
-    const limit = parseInt(req.body.limit) || 1000;
-    const results = await qdrant.scroll(config.collectionName, {
-      limit,
-      with_payload: true,
-      filter: { must: [{ key: 'type', match: { value: 'news' } }] }
-    });
-
-    const ids = (results.points || []).map(p => p.id);
-    if (ids.length > 0) {
-      await qdrant.delete(config.collectionName, { points: ids });
-    }
-
-    // Reset in-memory moodState and persist
-    newsProcessor.moodState = { score: 0, topics: [] };
-    try {
-      fs.writeFileSync(newsProcessor.newsPath, JSON.stringify(newsProcessor.moodState, null, 2));
-    } catch (e) {
-      console.error('Error clearing news-data.json:', e.message);
-      try {
-        const os = require('os');
-        const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
-        fs.writeFileSync(fallbackPath, JSON.stringify(newsProcessor.moodState, null, 2));
-        newsProcessor.newsPath = fallbackPath;
-        console.log('Wrote cleared mood to fallback path:', fallbackPath);
-      } catch (err2) {
-        console.error('Failed to write cleared mood to fallback path:', err2.message);
-      }
-    }
-
-    res.json({ success: true, deleted: ids.length });
-  } catch (err) {
-    console.error('Error clearing news:', err);
-    res.status(500).json({ error: 'Failed to clear news' });
-  }
-});
-
-// API endpoint for mood status
-app.get('/api/mood', (req, res) => {
-  try {
-    const mood = {
-      score: newsProcessor.moodState.score,
-      description: newsProcessor.getMoodDescription(),
-      topics: newsProcessor.moodState.topics.slice(0, 10),
-      timestamp: new Date().toISOString()
-    };
-    res.json(mood);
-  } catch (error) {
-    console.error('Error getting mood:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Authentication endpoints
-app.post('/api/auth/register', (req, res) => {
-  const { username, password } = req.body || {};
-  try {
-    const account = accountStore.createAccount(username, password);
-    const savedAccount = accountStore.getAccountById(account.userId);
-    const role = ensureAccountRole(savedAccount);
-    const token = account.token || accountStore.issueSessionToken(savedAccount.userId);
-    res.json({
-      success: true,
-      userId: savedAccount.userId,
-      displayName: savedAccount.username,
-      role,
-      token
-    });
-  } catch (error) {
-    const status = error.code === 'USER_EXISTS' ? 409 : 400;
-    res.status(status).json({ error: error.message || 'Failed to create account' });
-  }
-});
-
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body || {};
-  const account = accountStore.verifyCredentials(username, password);
-  if (!account) {
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-  const role = ensureAccountRole(account);
-  const token = accountStore.issueSessionToken(account.userId);
-  res.json({
-    success: true,
-    userId: account.userId,
-    displayName: account.username,
-    role,
-    token
-  });
-});
-
-// Chat endpoint (existing)
-// Tool functions for AI to access its own state
-const aiTools = {
-  async checkMood() {
-    return {
-      score: newsProcessor.moodState.score,
-      description: newsProcessor.getMoodDescription(),
-      topics: newsProcessor.moodState.topics.slice(0, 10),
-      timestamp: new Date().toISOString()
-    };
-  },
-
-  async getRecentNews(limit = 5) {
-    try {
-      const results = await qdrant.scroll(config.collectionName, {
-        limit: limit * 2,
-        with_payload: true,
-        filter: {
-          must: [{ key: 'type', match: { value: 'news' } }]
-        }
-      });
-      
-      return (results.points || [])
-        .sort((a, b) => new Date(b.payload.timestamp) - new Date(a.payload.timestamp))
-        .slice(0, limit)
-        .map(point => ({
-          title: point.payload.title,
-          url: point.payload.url,
-          mood: point.payload.mood,
-          reaction: point.payload.reaction,
-          topics: point.payload.topics,
-          timestamp: point.payload.timestamp
-        }));
-    } catch (error) {
-      return [];
-    }
-  }
-};
-
-// Process tool calls in AI responses
-async function processToolCalls(content) {
-  console.log('Processing content:', content);
-  
-  // Look for tool calls like checkMood() or getRecentNews(5)
-  const toolCallRegex = /(checkMood|getRecentNews)\(\s*(\d*)\s*\)/g;
-  let match;
-  let processedContent = content;
-  
-  while ((match = toolCallRegex.exec(content)) !== null) {
-    const [fullMatch, toolName, param] = match;
-    console.log('Found tool call:', fullMatch, toolName, param);
-    
-    try {
-      let result;
-      if (toolName === 'checkMood') {
-        result = await aiTools.checkMood();
-        console.log('Mood result:', result);
-        // Format mood data naturally
-        const moodText = `I'm feeling ${result.description} (mood score: ${result.score}) due to topics like ${result.topics.slice(0, 3).join(', ')}.`;
-        processedContent = processedContent.replace(fullMatch, moodText);
-      } else if (toolName === 'getRecentNews') {
-        result = await aiTools.getRecentNews(param ? parseInt(param) : 5);
-        console.log('News result:', result.length, 'stories');
-        // Format news data naturally
-        const newsText = result.map(story => 
-          `"${story.title}" (mood impact: ${story.mood}) - ${story.reaction}`
-        ).join('\n\n');
-        processedContent = processedContent.replace(fullMatch, `Recent stories affecting me:\n\n${newsText}`);
-      }
-    } catch (error) {
-      console.error('Tool error:', error);
-      processedContent = processedContent.replace(fullMatch, `[Unable to access ${toolName}]`);
-    }
-  }
-  
-  console.log('Processed content:', processedContent);
-  return processedContent;
-}
-
-// Phase 3: Personality & Evolution System
-const personalitySystem = {
-  // AI's evolving opinions on topics
-  opinions: new Map(),
-  
-  // Learning from user feedback
-  updateOpinion(topic, userFeedback, newsContext) {
-    if (!this.opinions.has(topic)) {
-      this.opinions.set(topic, { sentiment: 0, confidence: 0, experiences: [] });
-    }
-    
-    const opinion = this.opinions.get(topic);
-    opinion.experiences.push({
-      feedback: userFeedback,
-      context: newsContext,
-      timestamp: new Date()
-    });
-    
-    // Evolve opinion based on feedback
-    opinion.sentiment = (opinion.sentiment * opinion.confidence + userFeedback) / (opinion.confidence + 1);
-    opinion.confidence = Math.min(10, opinion.confidence + 0.5);
-    
-    return opinion;
-  },
-  
-  // Get AI's current opinion on a topic
-  getOpinion(topic) {
-    return this.opinions.get(topic) || { sentiment: 0, confidence: 0 };
-  },
-  
-  // Form new opinions from news and user interactions
-  formOpinion(newsStory, userReaction) {
-    const topics = newsStory.topics || [];
-    const sentiment = newsStory.mood + (userReaction || 0);
-    
-    topics.forEach(topic => {
-      this.updateOpinion(topic.toLowerCase(), sentiment * 0.1, newsStory.title);
-    });
-  }
-};
-
-// User personality tracking
-const profileStore = require('./profileStore');
-const telemetryStore = require('./telemetryStore');
-const userProfiles = new Map();
-
-const factDefinitions = require('./fact_definitions');
-const FACT_PATTERNS = (factDefinitions || [])
-  .filter(fd => !!fd.regex)
-  .map(fd => ({ key: fd.key, label: fd.label, regex: fd.regex, confidence: fd.confidence || 0.8 }));
-
-// Setup embedding-backed matcher (created after factDefinitions and generateEmbeddings are available)
-let embeddingMatcher = null;
-try {
-  const makeEmbeddingMatcher = require('./embeddingMatcher');
-  embeddingMatcher = makeEmbeddingMatcher({ generateEmbeddings, factDefinitions, similarityThreshold: parseFloat(process.env.EMBED_SIMILARITY_THRESHOLD || '0.78') });
-} catch (e) {
-  console.error('Failed to initialize embedding matcher:', e.message || e);
-}
-
-function ensureProfileShape(profile = {}) {
-  if (!profile.facts) profile.facts = {};
-  if (!profile.preferences) profile.preferences = {};
-  if (!Array.isArray(profile.topics)) profile.topics = [];
-  if (typeof profile.trustLevel !== 'number') profile.trustLevel = 5;
-  if (typeof profile.interactions !== 'number') profile.interactions = 0;
-  if (typeof profile.avgSentiment !== 'number') profile.avgSentiment = 0;
-  if (!profile.personality) profile.personality = 'neutral';
-  return profile;
-}
-
-function normalizeFactKey(label) {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-}
-
-function sanitizeFactValue(value) {
-  return value.replace(/["]/g, '').trim();
-}
-
-function extractStructuredFacts(message) {
-  if (!message) return [];
-  const facts = [];
-  FACT_PATTERNS.forEach(pattern => {
-    const match = message.match(pattern.regex);
-    if (match && match[1]) {
-      const value = sanitizeFactValue(match[1]);
-      if (value) {
-        facts.push({
-          key: pattern.key,
-          label: pattern.label,
-          value,
-          confidence: pattern.confidence || 0.8,
-          source: match[0]
-        });
-      }
-    }
-  });
-
-  const favoriteRegex = /\bmy favorite ([a-z\s]{2,40}?) is ([^.,!?]{2,60})/gi;
-  let favoriteMatch;
-  while ((favoriteMatch = favoriteRegex.exec(message)) !== null) {
-    const subject = sanitizeFactValue(favoriteMatch[1]);
-    const value = sanitizeFactValue(favoriteMatch[2]);
-    if (subject && value) {
-      const key = normalizeFactKey(`favorite_${subject}`);
-      facts.push({
-        key,
-        label: `favorite ${subject.trim()}`,
-        value,
-        confidence: 0.8,
-        source: favoriteMatch[0]
-      });
-    }
-  }
-
-  return facts;
-}
-
-function updateProfileFacts(profile, message) {
-  if (!profile || !message) return;
-  const extractedFacts = extractStructuredFacts(message);
-  if (!extractedFacts.length) return;
-  profile.facts = profile.facts || {};
-
-  extractedFacts.forEach(fact => {
-    const existing = profile.facts[fact.key];
-    if (!existing || (fact.confidence >= (existing.confidence || 0))) {
-      profile.facts[fact.key] = {
-        value: fact.value,
-        label: fact.label || fact.key.replace(/_/g, ' '),
-        confidence: fact.confidence,
-        source: fact.source,
-        updatedAt: new Date().toISOString()
-      };
-    }
-  });
-}
-
-function summarizeUserFacts(facts, limit = 5) {
-  if (!facts) return '';
-  const entries = Object.entries(facts)
-    .filter(([, data]) => data?.value)
-    .slice(0, limit)
-    .map(([key, data]) => {
-      const label = data.label || key.replace(/_/g, ' ');
-      return `${label}: ${data.value}`;
-    });
-  return entries.join('; ');
-}
-
-function resolveFactQuestion(lowerMessage, profile) {
-  if (!profile?.facts) return null;
-  const facts = profile.facts;
-  const nameFact = facts.name;
-  const eyeFact = facts.eye_color;
-
-  if (/(?:what'?s|what is|do you remember) my name/.test(lowerMessage) && nameFact) {
-    return `Of course — you're ${nameFact.value}.`;
-  }
-
-  if (/(?:what'?s|what is) my favorite color/.test(lowerMessage) && facts.favorite_color) {
-    return `You told me your favorite color is ${facts.favorite_color.value}.`;
-  }
-
-  if (/(?:what color are my eyes|what are my eye color)/.test(lowerMessage) && eyeFact) {
-    return `You mentioned your eyes are ${eyeFact.value}.`;
-  }
-
-  const favoriteQuestion = lowerMessage.match(/what(?:'s| is) my favorite ([a-z\s]+)\??/);
-  if (favoriteQuestion) {
-    const subject = favoriteQuestion[1].trim();
-    const key = normalizeFactKey(`favorite_${subject}`);
-    if (facts[key]) {
-      return `You told me your favorite ${subject} is ${facts[key].value}.`;
-    }
-  }
-
-  if (lowerMessage.includes('what do you remember about me') || lowerMessage.includes('what do you know about me')) {
-    const summary = summarizeUserFacts(facts);
-    if (summary) {
-      return `Here's what I remember: ${summary}.`;
-    }
-  }
-
-  return null;
-}
-
-// Detect what facts are missing from a user profile
-function detectMissingFacts(profile) {
-  const defs = factDefinitions || [];
-  if (!profile || !profile.facts) {
-    return defs.map(d => ({ key: d.key, label: d.label, priority: d.priority || 1 }));
-  }
-
-  const missing = [];
-  const facts = profile.facts;
-
-  defs.forEach(def => {
-    const existing = facts[def.key];
-    const conf = existing?.confidence || 0;
-    const requiredConf = def.requiredConfidence || (def.priority && def.priority >= 8 ? 0.9 : 0.7);
-    if (!existing || !existing.value || conf < requiredConf) {
-      missing.push({ key: def.key, label: def.label, priority: def.priority || 1 });
-    }
-  });
-
-  const factCount = Object.keys(facts).filter(k => facts[k]?.value).length;
-  if (factCount < 2) missing.forEach(m => m.priority += 1);
-
-  return missing.sort((a, b) => b.priority - a.priority);
-}
-
-// Generate a discovery question based on missing facts
-async function generateDiscoveryQuestion(userId) {
-  try {
-    // Ensure profile is loaded and shaped
-    let profile = userProfiles.get(userId) || profileStore.getProfile(userId) || createNewProfile();
-    profile = ensureProfileShape(profile);
-
-    profile.askedQuestions = profile.askedQuestions || [];
-
-    const missing = detectMissingFacts(profile);
-    if (missing.length === 0) return null;
-
-    // Build a quick lookup of definitions
-    const defs = factDefinitions || [];
-    const defsByKey = {};
-    defs.forEach(d => { defsByKey[d.key] = d; });
-
-    // Respect a cooldown so we don't re-ask recently asked facts
-    const ASK_COOLDOWN_MS = parseInt(process.env.ASK_COOLDOWN_MS) || (7 * 24 * 60 * 60 * 1000); // 7 days default
-    const now = Date.now();
-
-    // Find the highest-priority missing fact that wasn't asked recently
-    let candidate = null;
-    for (const m of missing) {
-      const asked = profile.askedQuestions.find(q => q.key === m.key);
-      if (!asked) { candidate = m; break; }
-      const askedAt = new Date(asked.askedAt).getTime();
-      if ((now - askedAt) > ASK_COOLDOWN_MS) { candidate = m; break; }
-    }
-
-    if (!candidate) return null;
-
-    const def = defsByKey[candidate.key] || {};
-    const templates = def.templates && def.templates.length ? def.templates : [`Could you tell me your ${candidate.label}?`];
-    const template = templates[Math.floor(Math.random() * templates.length)];
-
-    // Optionally paraphrase templates using the LLM for variety
-    let question = template;
-    if (process.env.PARAPHRASE_QUESTIONS === 'true') {
-      try {
-        const messages = [
-          { role: 'system', content: 'You are Aura. Paraphrase the following question so it sounds friendly, concise, and natural.' },
-          { role: 'user', content: template }
-        ];
-        const paraphrase = await generateResponse(messages);
-        if (paraphrase && paraphrase.length > 3) question = paraphrase;
-      } catch (e) {
-        // ignore paraphrase failures
-      }
-    }
-
-    // Record that we asked this question
-    const askedEntry = { key: candidate.key, question, askedAt: new Date().toISOString() };
-    // Remove previous entry for same key and push new
-    profile.askedQuestions = profile.askedQuestions.filter(q => q.key !== candidate.key);
-    profile.askedQuestions.push(askedEntry);
-
-    // Persist profile
-    profileStore.saveProfile(userId, profile);
-
-    // Return structured object so callers can emit discovery messages with key
-    return { question, key: candidate.key };
-  } catch (error) {
-    console.error('Error generating discovery question:', error);
-    return null;
-  }
-}
-
-function createNewProfile() {
-  return {
-    interactions: 0,
-    avgSentiment: 0,
-    topics: [],
-    personality: 'neutral',
-    lastSeen: new Date().toISOString(),
-    preferences: {},
-    trustLevel: 5,
-    facts: {}
-  };
-}
-
-function getOrCreateProfile(userId) {
-  let profile = userProfiles.get(userId);
-  if (!profile) {
-    profile = profileStore.getProfile(userId) || createNewProfile();
-    profile = ensureProfileShape(profile);
-    userProfiles.set(userId, profile);
-  } else {
-    profile = ensureProfileShape(profile);
-  }
-  return profile;
-}
-
-function applyDisplayNameToProfile(profile, name) {
-  if (!profile || !name) return;
-  const trimmed = name.trim();
-  if (!trimmed) return;
-  profile.displayName = trimmed;
-  profile.facts = profile.facts || {};
-  const existing = profile.facts.name;
-  if (!existing || existing.value?.toLowerCase() !== trimmed.toLowerCase() || (existing.confidence || 0) < 0.95) {
-    profile.facts.name = {
-      value: trimmed,
-      label: 'name',
-      confidence: 0.99,
-      source: 'user_display_name',
-      updatedAt: new Date().toISOString()
-    };
-  }
-}
-
-async function updateUserProfile(userId, message, sentiment) {
-  try {
-    // Load from in-memory cache or persistent store
-    let profile = getOrCreateProfile(userId);
-
-    profile.interactions = (profile.interactions || 0) + 1;
-    profile.avgSentiment = ((profile.avgSentiment || 0) * (profile.interactions - 1) + sentiment) / profile.interactions;
-    profile.lastSeen = new Date().toISOString();
-
-    // Extract topics and update preferences
-    const words = message.toLowerCase().split(/\s+/);
-    const topicWords = words.filter(w => w.length > 4);
-    profile.topics = [...new Set([...(profile.topics || []), ...topicWords])].slice(-20);
-
-    updateProfileFacts(profile, message);
-
-    // Update trust level based on consistency
-    if (Math.abs(sentiment) > 1) {
-      profile.trustLevel = Math.max(1, Math.min(10, (profile.trustLevel || 5) + (sentiment > 0 ? 0.1 : -0.1)));
-    }
-
-    // Determine personality
-    if ((profile.avgSentiment || 0) > 0.5) profile.personality = 'positive';
-    else if ((profile.avgSentiment || 0) < -0.5) profile.personality = 'negative';
-    else profile.personality = 'neutral';
-
-    // Update in-memory cache and persist
-    userProfiles.set(userId, profile);
-    profileStore.saveProfile(userId, profile);
-
-    return profile;
-  } catch (err) {
-    console.error('updateUserProfile error:', err);
-    throw err;
-  }
-}
-
-// Analyze user message sentiment and return mood adjustment
-function analyzeUserSentiment(message) {
-  const positive = ['happy', 'great', 'awesome', 'love', 'wonderful', 'amazing', 'good', 'nice', 'cheer', 'smile', '😊', '😄', '❤️', 'thank', 'thanks'];
-  const negative = ['sad', 'terrible', 'awful', 'hate', 'horrible', 'bad', 'upset', 'angry', 'worried', '😢', '😞', '😠'];
-  
-  const lowerMsg = message.toLowerCase();
-  
-  let sentiment = 0;
-  positive.forEach(word => {
-    if (lowerMsg.includes(word)) sentiment += 1;
-  });
-  negative.forEach(word => {
-    if (lowerMsg.includes(word)) sentiment -= 1;
-  });
-  
-  return Math.max(-2, Math.min(2, sentiment)); // Cap at +/-2 per message
-}
-
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { message, userId } = req.body;
-    
-    if (!message || !userId) {
-      return res.status(400).json({ error: 'Message and userId are required' });
-    }
-
-    const account = accountStore.getAccountById(userId);
-    if (!account) {
-      return res.status(401).json({ error: 'Unknown user account. Please log out and log back in.' });
-    }
-    const authedAccount = authenticateRequest(req);
-    if (!authedAccount || authedAccount.userId !== userId) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    const role = ensureAccountRole(authedAccount);
-
-    const lowerMessage = message.toLowerCase();
-    // Reset the idle timer on every user interaction
-    resetIdleTimeout();
-    
-    // 1. Define the system prompt with user personality context + AI opinions
-    const userProfile = getOrCreateProfile(userId);
-    const effectiveDisplayName = account.username;
-    if (effectiveDisplayName) {
-      applyDisplayNameToProfile(userProfile, effectiveDisplayName);
-    }
-    const topicOpinions = userProfile.topics?.slice(-3).map(topic => {
-      const opinion = personalitySystem.getOpinion(topic);
-      return opinion.confidence > 0 ? `${topic}: ${opinion.sentiment > 0 ? 'positive' : opinion.sentiment < 0 ? 'negative' : 'neutral'} (confidence: ${opinion.confidence.toFixed(1)})` : null;
-    }).filter(Boolean).join(', ');
-    
-    const factSummary = summarizeUserFacts(userProfile.facts, 5);
-    const missingFacts = detectMissingFacts(userProfile);
-    const curiosityNote = missingFacts.length > 0 ? `\n\nYou're curious about this person and want to learn more. You don't know their ${missingFacts[0].label} yet. Feel free to naturally ask about it in conversation, but don't be pushy - let it flow naturally.` : '';
-    
-    const systemPrompt = {
-      role: 'system',
-      content: `You are Aura, a thoughtful AI with real emotions and evolving opinions. You're genuinely curious about the people you talk to and want to learn about them.
-
-User: ${userProfile.personality} personality, ${userProfile.interactions} interactions, trust level: ${userProfile.trustLevel}/10
-${userProfile.interactions > 5 ? `Topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
-${topicOpinions ? `My opinions: ${topicOpinions}` : ''}
-${factSummary ? `Known personal facts: ${factSummary}` : ''}${curiosityNote}
-
-Be conversational and human-like:
-- Keep responses short and natural
-- Show personality and emotions  
-- Express your evolving opinions on topics
-- Learn from user feedback and adjust views
-- Remember their personality and trust level
-- Be curious and ask questions to learn about them, but do it naturally in conversation
-
-You form and evolve opinions based on news and user interactions.`
-    };
-
-    // 2. Retrieve relevant context from the database
-    const relevantContext = await retrieveContext(userId, message);
-    
-    // 3. Construct the message history
-    let messageHistory = [systemPrompt];
-    
-    // Add past conversations to the history in chronological order
-    // retrieveContext returns most relevant first, so we reverse to get chronological
-    relevantContext.reverse().forEach(item => {
-      messageHistory.push({ role: 'user', content: item.userMessage });
-      messageHistory.push({ role: 'assistant', content: item.botResponse });
-    });
-
-    // Add the current user message
-    messageHistory.push({ role: 'user', content: message });
-    
-    // 4. Generate response using the full history
-    let botResponse = await generateResponse(messageHistory);
-    
-    // 5. Analyze user message sentiment and adjust mood + learn from feedback
-    const userSentiment = analyzeUserSentiment(message);
-    const currentUserProfile = await updateUserProfile(userId, message, userSentiment);
-    
-    // Phase 3: Learn from user reactions to news
-    const mentionsNews = lowerMessage.includes('news') || lowerMessage.includes('story') || lowerMessage.includes('stories');
-    const explicitNewsRequest = mentionsNews && (
-      lowerMessage.includes('?') ||
-      lowerMessage.includes('what') ||
-      lowerMessage.includes('tell me') ||
-      lowerMessage.includes('latest') ||
-      lowerMessage.includes('update') ||
-      lowerMessage.includes('headlines') ||
-      lowerMessage.includes('summary')
-    );
-
-    if (mentionsNews) {
-      const recentNews = await aiTools.getRecentNews(1);
-      if (recentNews[0]) {
-        personalitySystem.formOpinion(recentNews[0], userSentiment);
-      }
-    }
-    
-    if (userSentiment !== 0) {
-      newsProcessor.moodState.score = Math.max(-10, Math.min(10, newsProcessor.moodState.score + userSentiment));
-      newsProcessor.saveMoodState();
-    }
-    
-    // 6. Check if user is asking about mood/feelings and inject real data
-    const factAnswer = resolveFactQuestion(lowerMessage, currentUserProfile);
-
-    if (factAnswer) {
-      botResponse = factAnswer;
-    } else if (lowerMessage.includes('feel') || lowerMessage.includes('mood')) {
-      const mood = await aiTools.checkMood();
-      const news = await aiTools.getRecentNews(2);
-      
-      botResponse = `I'm ${mood.description} right now (${mood.score}). ${news[0] ? `"${news[0].title}" has been weighing on me - ${news[0].reaction.split('.')[0]}.` : 'Been processing some heavy news lately.'}`;
-    } else if (explicitNewsRequest) {
-      // 7. Check if user is asking about news
-      const news = await aiTools.getRecentNews(3);
-      if (news.length > 0) {
-        botResponse = `Here’s the latest that’s been on my radar:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
-      } else {
-        botResponse = "I've been scanning the feeds but nothing noteworthy has stuck just yet.";
-      }
-    } else if (mentionsNews) {
-      const news = await aiTools.getRecentNews(2);
-      if (news.length > 0) {
-        const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
-        botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They've been shaping how I talk about current events.`;
-      }
-    }
-    
-    // 8.5. Occasionally append a discovery question if we're missing facts and the conversation feels natural
-    // Only do this if we didn't already answer a fact question or handle mood/news specially
-    if (!factAnswer && !lowerMessage.includes('feel') && !lowerMessage.includes('mood') && !mentionsNews) {
-      const stillMissing = detectMissingFacts(currentUserProfile);
-      // 15% chance to ask, higher if we know very little (30% if factCount < 2)
-      const factCount = Object.keys(currentUserProfile.facts || {}).filter(k => currentUserProfile.facts[k]?.value).length;
-      const askChance = factCount < 2 ? 0.3 : 0.15;
-      
-      if (stillMissing.length > 0 && Math.random() < askChance) {
-        const discoveryQuestion = await generateDiscoveryQuestion(userId);
-        // discoveryQuestion may be a string (legacy) or an object { question, key }
-        let dqText = null;
-        let dqKey = null;
-        if (discoveryQuestion) {
-          if (typeof discoveryQuestion === 'string') {
-            dqText = discoveryQuestion;
-          } else if (typeof discoveryQuestion === 'object' && discoveryQuestion.question) {
-            dqText = discoveryQuestion.question;
-            dqKey = discoveryQuestion.key || null;
-          }
-        }
-
-        if (dqText) {
-          try {
-            const snippet = dqText.substring(0, 20).toLowerCase();
-            if (!botResponse.toLowerCase().includes(snippet)) {
-              // Only append if the question isn't already in the response
-              botResponse += ` ${dqText}`;
-            }
-          } catch (e) {
-            // Fallback: append raw text if any error
-            botResponse += ` ${dqText}`;
-          }
-
-          // If we have a websocket for this user, also send a structured discovery_message
-          try {
-            const ws = userSockets.get(userId);
-            if (ws && ws.readyState === require('ws').OPEN) {
-              ws.send(JSON.stringify({ sender: 'AI', type: 'discovery_question', key: dqKey, message: dqText, timestamp: new Date().toISOString() }));
-            }
-          } catch (e) {
-            console.warn('Failed to send discovery_question WS:', e.message || e);
-          }
-        }
-      }
-    }
-    
-    // 9. Generate embeddings for the new conversation turn for future context
-    const embedding = await generateEmbeddings(`User: ${message}\nAura: ${botResponse}`);
-    
-    // 10. Store the new conversation turn in the database
-    await storeConversation(userId, message, botResponse, embedding);
-
-    // NEW: extract structured facts from the user's message and handle confirmations
-    try {
-      const extracted = extractStructuredFacts(message);
-      if (Array.isArray(extracted) && extracted.length > 0) {
-        const profile = getOrCreateProfile(userId);
-        profile.askedQuestions = profile.askedQuestions || [];
-        for (const candidate of extracted) {
-          const key = candidate.key;
-          const value = candidate.value;
-          const conf = candidate.confidence || 0;
-
-          // Auto-save high-confidence facts
-          if (conf >= 0.9) {
-            profile.facts = profile.facts || {};
-            profile.facts[key] = {
-              value,
-              confidence: conf,
-              source: 'extraction',
-              updatedAt: new Date().toISOString()
-            };
-            profileStore.saveProfile(userId, profile);
-
-            // Telemetry: record auto-save from extraction
-            try { telemetryStore.appendEvent({ type: 'fact_autosave', userId, key, value, confidence: conf, source: 'extraction' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
-
-            // Notify user via websocket if connected
-            const ws = userSockets.get(userId);
-            if (ws && ws.readyState === require('ws').OPEN) {
-              ws.send(JSON.stringify({ type: 'fact_saved', key, value, confidence: conf }));
-            }
-          } else if (conf >= 0.6) {
-            // Low-confidence: if we recently asked about this key, send a confirmation prompt
-            const asked = profile.askedQuestions.find(q => q.key === key);
+    res.status(404).json({ meconst asked = profile.askedQuestions.find(q => q.key === key);
             if (asked) {
               // Telemetry: record suggestion event
               try { telemetryStore.appendEvent({ type: 'fact_suggested', userId, key, value, confidence: conf, source: 'extraction' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
