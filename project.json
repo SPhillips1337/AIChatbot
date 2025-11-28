@@ -3,8 +3,8 @@
     "name": "PHPaibot",
     "description": "A proactive PHP chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
     "version": "0.6.1",
-    "repository": "https://github.com/username/PHPaibot",
-    "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API; structured facts, embedding-backed confirmation, inline profile UX, and telemetry implemented"
+    "repository": "https://github.com/SPhillips1337/AIChatbot.git",
+    "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API; structured facts, embedding-backed confirmation, inline profile UX, telemetry implemented, and improved per-user proactive timers"
   },
   "architecture": {
     "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote LLM and embedding endpoints. Proactive thoughts are dynamically generated and influenced by current events.",
@@ -40,7 +40,7 @@
         "description": "Docker-based infrastructure with external service integration.",
         "implementation": "Docker Compose with optional QDRANT and external LLM/embedding endpoints.",
         "components": [
-          {"name": "QDRANT vector database", "status": "Implemented", "url": "http://192.168.5.227:6333/"},
+          {"name": "QDRANT vector database", "status": "Implemented", "url": "http://192.168.1.2:6333/"},
           {"name": "Remote LLM/Embedding endpoints", "status": "Configured via env", "note": "Set LLM_URL and EMBEDDING_URL"},
           {"name": "Node.js webhook API", "status": "Implemented"},
           {"name": "PHP Web server", "status": "Implemented"}

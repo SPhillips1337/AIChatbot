@@ -23,6 +23,11 @@ This update captures the recent implementation work for structured facts, embedd
 5. Add a small admin debug endpoint to preview which news items will be used for the next news-influenced thought (preview only, admin-only).
 6. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
 
+## Recent infra changes (notes)
+- Per-user idle/proactive timers and deferred greeting logic implemented to stop repeated global greetings and to target proactive thoughts to individual users.
+- Undelivered thoughts are now stored to disk per-user and delivered when the user next authenticates.
+- Added `GET /api/debug/states` (admin-only) to inspect userStates and aid debugging.
+- During rollout, both a containerized (docker-compose) and a manual node process ran; ensure your UI's API_BASE points to the intended instance (default container uses port 3000).
 ## Short-term plan (next sprint)
 1. Tune thresholds: adjust `EMBED_AUTO_SAVE_SIM`, `EMBED_CONFIRM_SIM`, and extraction confidence thresholds based on telemetry.
 2. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.

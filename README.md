@@ -25,6 +25,9 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - Improved WebSocket client resilience: automatic reconnect with exponential backoff and keepalive pings to survive reverse proxies (updated `index.html`).
 - News processing reliability improvements: news selection is now sorted by `payload.timestamp` and the processor logs the news items chosen for LLM prompts (`webhook-api/news-processor.js`).
 - Minor bugfixes and logging improvements to help diagnose disconnects and news freshness issues.
+- Per-user idle/proactive timers (prevent repeated global greetings) and deferred greeting logic to avoid duplicate welcomes on reconnect.
+- Undelivered thought storage and delivery on user auth (server stores proactive messages when users are offline and delivers them after they authenticate).
+- Debug endpoint: `GET /api/debug/states` (admin-only) to inspect in-memory user states and timers for troubleshooting.
 
 
 ## Components
@@ -69,6 +72,8 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - `QDRANT_URL` - Qdrant endpoint (optional)
 - `PORT` - Server port
 - `DEV_MOCK` - If `true` returns canned embeddings/responses for local testing
+- Note: If you edit `webhook-api/fact_definitions.js`, restart the webhook-api server to refresh preloaded example embeddings.
+- Telemetry retention: `webhook-api/telemetry.json` stores up to 10,000 recent events (see `webhook-api/telemetryStore.js`).
 - `PARAPHRASE_QUESTIONS` - If `true` LLM paraphrases discovery templates before asking
 - `ASK_COOLDOWN_MS` - Milliseconds to wait before re-asking the same fact (default 7 days)
 - `EMBED_AUTO_SAVE_SIM` - Embedding similarity threshold to auto-save (default 0.90)
@@ -82,6 +87,9 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
     cd AIChatbot
     cd webhook-api && npm install
     ```
+
+    - Note: If you edit `webhook-api/fact_definitions.js`, restart the webhook-api server to refresh preloaded example embeddings.
+    - Telemetry retention: `webhook-api/telemetry.json` stores up to 10,000 recent events (see `webhook-api/telemetryStore.js`).
 
 2.  **Configure Remote Services (production):**
     Set `LLM_URL`, `EMBEDDING_URL`, and `QDRANT_URL` in `.env` or in your environment.
