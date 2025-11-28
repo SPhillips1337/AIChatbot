@@ -9,3 +9,7 @@ webhook-api/node_modules/
 
 # Runtime stores
 webhook-api/accounts.json
+venv/*
+temp.txt
+webhook-api/news-data.json
+webhook-api/profile.json
