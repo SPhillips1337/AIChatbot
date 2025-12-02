@@ -59,11 +59,20 @@ function addRelationship(userId, type, targetId, metadata = {}) {
   if (!store[userId].relationships) store[userId].relationships = {};
   if (!store[userId].relationships[type]) store[userId].relationships[type] = [];
   
-  store[userId].relationships[type].push({
-    targetId,
-    created: new Date().toISOString(),
-    ...metadata
-  });
+  // Check if relationship already exists
+  const existing = store[userId].relationships[type].find(rel => rel.targetId === targetId);
+  if (existing) {
+    // Update existing relationship with new metadata
+    Object.assign(existing, metadata);
+    existing.updated = new Date().toISOString();
+  } else {
+    // Add new relationship
+    store[userId].relationships[type].push({
+      targetId,
+      created: new Date().toISOString(),
+      ...metadata
+    });
+  }
   saveToDisk();
 }
 
