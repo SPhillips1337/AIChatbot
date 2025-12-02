@@ -1,5 +1,15 @@
 const rateLimits = new Map();
 
+// Cleanup expired entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, limit] of rateLimits.entries()) {
+    if (now > limit.resetTime) {
+      rateLimits.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
 function rateLimit(maxRequests = 30, windowMs = 60000) {
   return (req, res, next) => {
     const key = req.headers['x-user-id'] || req.ip;
