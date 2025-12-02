@@ -1,7 +1,7 @@
-# PHPaibot Development Plan (Updated)
+# AURA.ai Development Plan (Updated)
 
 ## Purpose of this update
-This update captures the recent implementation work for structured facts, embedding-backed confirmation, inline profile UI, and telemetry so we can pick up development later with a clear roadmap and status.
+This update captures the recent production hardening work including relationship tracking, error handling improvements, rate limiting, and chat logic refinements so we can pick up development later with a clear roadmap and status.
 
 ## Recent accomplishments
 - Added `webhook-api/fact_definitions.js` with a curated list of structured facts, priorities, templates, and example values.
@@ -14,52 +14,68 @@ This update captures the recent implementation work for structured facts, embedd
 - Implemented telemetry collection (`webhook-api/telemetry.json` + `telemetryStore`) and a secure admin endpoint `GET /api/admin/telemetry` plus a small telemetry UI on the admin dashboard.
 - Improved frontend WebSocket reliability: `index.html` now includes automatic reconnect with exponential backoff and periodic keepalive pings to reduce reverse-proxy disconnects.
 - Fixed news-influenced thought selection to use the most recent Qdrant news entries (sorted by `payload.timestamp`) and added selection logging for easier debugging (`webhook-api/news-processor.js`).
+- **NEW: Added relationship tracking system** - Extended profileStore.js with relationship tracking and shared interest discovery.
+- **NEW: Production hardening** - Added rate limiting (30 req/min), memory leak prevention, service health monitoring, and configuration validation.
+- **NEW: Improved chat logic** - Fixed intrusive mood/news injection to only trigger on direct questions, not casual mentions.
+- **NEW: Robust error handling** - Better JSON parsing with fallbacks for malformed LLM responses.
 
 ## Short-term plan (next sprint)
-1. Tune thresholds: adjust `EMBED_AUTO_SAVE_SIM`, `EMBED_CONFIRM_SIM`, and extraction confidence thresholds based on telemetry.
-2. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
-3. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
-4. Harden authentication checks and ensure all profile mutations require proper `X-User-Id` / `X-Auth-Token` headers.
-5. Add a small admin debug endpoint to preview which news items will be used for the next news-influenced thought (preview only, admin-only).
-6. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
+1. ✅ **COMPLETED**: Tune thresholds and add production hardening features
+2. ✅ **COMPLETED**: Add relationship tracking system for user connections
+3. ✅ **COMPLETED**: Fix intrusive mood/news injection in chat responses
+4. ✅ **COMPLETED**: Add robust error handling for JSON parsing failures
+5. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
+6. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
+7. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
 
 ## Recent infra changes (notes)
 - Per-user idle/proactive timers and deferred greeting logic implemented to stop repeated global greetings and to target proactive thoughts to individual users.
 - Undelivered thoughts are now stored to disk per-user and delivered when the user next authenticates.
 - Added `GET /api/debug/states` (admin-only) to inspect userStates and aid debugging.
-- During rollout, both a containerized (docker-compose) and a manual node process ran; ensure your UI's API_BASE points to the intended instance (default container uses port 3000).
-## Short-term plan (next sprint)
-1. Tune thresholds: adjust `EMBED_AUTO_SAVE_SIM`, `EMBED_CONFIRM_SIM`, and extraction confidence thresholds based on telemetry.
-2. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
-3. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
-4. Harden authentication checks and ensure all profile mutations require proper `X-User-Id` / `X-Auth-Token` headers.
+- Added rate limiting middleware (`rateLimiter.js`) and service health monitoring (`healthChecker.js`).
+- Extended profileStore.js with relationship tracking capabilities and shared interest discovery.
+- Improved chat logic to be more contextual and less intrusive with mood/news injection.
 
 ## Medium-term plan
 1. Create an admin UI for tuning thresholds and viewing per-fact metrics (accept/confirm/reject counts) — extend the current dashboard telemetry card.
 2. Integrate optional NLP/NER service for entity extraction (names, dates, places) to complement regex + embeddings.
 3. Implement privacy/consent flows for high-sensitivity facts (e.g., require explicit modal consent before storing birthdays or contact info).
-4. Improve onboarding UX: disclose what the system remembers and provide a simple “memory” settings panel in the profile modal.
+4. Improve onboarding UX: disclose what the system remembers and provide a simple "memory" settings panel in the profile modal.
+5. Add automated testing suite for fact extraction, confirmation flows, and relationship tracking.
 
 ## Long-term plan
 1. Curriculum learning: adapt the question ordering per user cohort and domain (e.g., ask gaming facts earlier for gamers).
 2. Retention & compliance: add export/delete tools and retention policies for user data.
 3. Deploy monitoring and periodic auditing of saved facts to detect potential PII captures that need special handling.
+4. Consider Neo4j migration for advanced relationship queries when JSON approach hits performance limits.
 
 ## Testing & validation
 - Create a test-suite of example utterances for each fact (canonical and paraphrased) and assert expected extraction/confirmation behavior.
 - Simulate user sessions to measure how often the system asks discovery questions and how frequently users confirm/reject.
 - Use local `DEV_MOCK` to run fast offline tests without calling remote embeddings/LLMs.
+- Test relationship tracking and shared interest discovery with multiple user profiles.
+
+## Production readiness status
+✅ **COMPLETED**:
+- Rate limiting (30 requests/minute per user)
+- Memory leak prevention (automatic WebSocket cleanup)
+- Service health monitoring with graceful fallbacks
+- Configuration validation on startup
+- Robust JSON parsing with error handling
+- Relationship tracking system
+- Contextual mood/news injection
 
 ## Notes for future work
 - The system defaults are conservative: auto-save only for high-confidence regex or embedding matches. Inline confirmation balances natural conversation with data quality.
 - Example embeddings are preloaded at server startup; if `fact_definitions.js` changes, restart the server to refresh cached embeddings.
 - Telemetry is stored in `webhook-api/telemetry.json` — consider connecting this to a metrics/analytics pipeline for long-term storage and dashboards.
+- Relationship system is JSON-based and suitable for moderate user bases; consider Neo4j migration for complex graph queries at scale.
 
 ---
 
-Next options I can take for you:
-- Implement aggregated telemetry views and CSV export now.
-- Add admin UI controls to adjust thresholds live from the dashboard.
-- Add unit tests for extraction and confirmation flows.
+**Status**: Phase 3 is now complete with production-ready hardening. The system is ready for deployment with comprehensive error handling, rate limiting, and relationship tracking capabilities.
 
-Which would you like me to implement next?
+Next priorities:
+- Add automated testing suite
+- Implement aggregated telemetry views
+- Add admin UI for threshold tuning
