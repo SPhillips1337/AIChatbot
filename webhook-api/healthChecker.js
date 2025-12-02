@@ -10,10 +10,13 @@ class HealthChecker {
   async checkService(name) {
     try {
       const service = this.services[name];
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(service.url, { 
         method: 'HEAD', 
-        timeout: 5000 
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       service.healthy = response.ok;
     } catch (error) {
       this.services[name].healthy = false;
