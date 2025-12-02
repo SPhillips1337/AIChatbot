@@ -53,6 +53,50 @@ function deleteProfile(userId) {
   return false;
 }
 
+// Relationship tracking
+function addRelationship(userId, type, targetId, metadata = {}) {
+  if (!store[userId]) store[userId] = {};
+  if (!store[userId].relationships) store[userId].relationships = {};
+  if (!store[userId].relationships[type]) store[userId].relationships[type] = [];
+  
+  store[userId].relationships[type].push({
+    targetId,
+    created: new Date().toISOString(),
+    ...metadata
+  });
+  saveToDisk();
+}
+
+function getRelationships(userId, type = null) {
+  const profile = store[userId];
+  if (!profile?.relationships) return [];
+  return type ? (profile.relationships[type] || []) : profile.relationships;
+}
+
+function findUsersWithSharedInterests(userId, minShared = 1) {
+  const userProfile = store[userId];
+  if (!userProfile?.facts) return [];
+  
+  const userInterests = Object.keys(userProfile.facts);
+  const matches = [];
+  
+  Object.keys(store).forEach(otherUserId => {
+    if (otherUserId === userId) return;
+    const otherProfile = store[otherUserId];
+    if (!otherProfile?.facts) return;
+    
+    const sharedInterests = userInterests.filter(interest => 
+      otherProfile.facts[interest]
+    );
+    
+    if (sharedInterests.length >= minShared) {
+      matches.push({ userId: otherUserId, sharedInterests });
+    }
+  });
+  
+  return matches;
+}
+
 // Initialize on require
 load();
 
@@ -60,5 +104,8 @@ module.exports = {
   getProfile,
   saveProfile,
   listProfiles,
-  deleteProfile
+  deleteProfile,
+  addRelationship,
+  getRelationships,
+  findUsersWithSharedInterests
 };
