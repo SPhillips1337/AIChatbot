@@ -438,7 +438,7 @@ setInterval(() => {
     if (ws.readyState !== require('ws').OPEN || ws._lastActivity < staleThreshold) {
       userSockets.delete(userId);
       if (userStates.has(userId)) {
-        clearTimeout(userStates.get(userId).idleTimer);
+        clearTimeout(userStates.get(userId).idleTimeout);
         userStates.delete(userId);
       }
     }
