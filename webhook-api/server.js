@@ -1676,7 +1676,8 @@ You form and evolve opinions based on news and user interactions.`
 
     if (factAnswer) {
       botResponse = factAnswer;
-    } else if (lowerMessage.includes('feel') || lowerMessage.includes('mood')) {
+    } else if (lowerMessage.includes('how are you feeling') || lowerMessage.includes('what\'s your mood') || (lowerMessage.includes('feel') && lowerMessage.includes('?'))) {
+      // Only inject mood for direct mood questions, not casual mentions of "feel"
       const mood = await aiTools.checkMood();
       const news = await aiTools.getRecentNews(2);
       
@@ -1689,7 +1690,8 @@ You form and evolve opinions based on news and user interactions.`
       } else {
         botResponse = "I've been scanning the feeds but nothing noteworthy has stuck just yet.";
       }
-    } else if (mentionsNews) {
+    } else if (mentionsNews && (lowerMessage.includes('current') || lowerMessage.includes('events') || lowerMessage.includes('happening'))) {
+      // Only append news context when user is discussing current events, not casual mentions
       const news = await aiTools.getRecentNews(2);
       if (news.length > 0) {
         const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
