@@ -2,6 +2,10 @@ const neo4j = require('neo4j-driver');
 
 class GraphStore {
   constructor() {
+    if (!process.env.NEO4J_URI || !process.env.NEO4J_USER || !process.env.NEO4J_PASSWORD) {
+      throw new Error('Neo4j configuration missing: NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set');
+    }
+    
     this.driver = neo4j.driver(
       process.env.NEO4J_URI,
       neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASSWORD)
