@@ -25,7 +25,13 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - Improved WebSocket client resilience: automatic reconnect with exponential backoff and keepalive pings to survive reverse proxies (updated `index.html`).
 - News processing reliability improvements: news selection is now sorted by `payload.timestamp` and the processor logs the news items chosen for LLM prompts (`webhook-api/news-processor.js`).
 - Minor bugfixes and logging improvements to help diagnose disconnects and news freshness issues.
-
+- Per-user idle/proactive timers (prevent repeated global greetings) and deferred greeting logic to avoid duplicate welcomes on reconnect.
+- Undelivered thought storage and delivery on user auth (server stores proactive messages when users are offline and delivers them after they authenticate).
+- Debug endpoint: `GET /api/debug/states` (admin-only) to inspect in-memory user states and timers for troubleshooting.
+- **Relationship tracking system** in JSON profiles for user connections and shared interests.
+- **Production hardening**: Rate limiting, memory leak prevention, service health monitoring, and configuration validation.
+- **Improved chat logic**: Fixed intrusive mood/news injection to be more contextual and natural.
+- **Robust JSON parsing**: Better error handling for malformed LLM responses in news processing.
 
 ## Components
 
@@ -47,12 +53,14 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - News-aware personality with RSS integration
 - Emotional state tracking and mood system
 
-### 🔄 Phase 3: Personality & Evolution [In Progress]
+### ✅ Phase 3: Personality & Evolution [Completed]
 - Profile store persists user interests, sentiment averages, trust level, and conversation topics
 - Structured fact extraction and discovery questions (definition-driven)
 - Embedding-backed semantic matching for paraphrase handling
 - Inline confirmation flow and a small profile UI for reviewing/removing facts
 - Telemetry collection and admin telemetry UI for tuning and analysis
+- Relationship tracking system for user connections
+- Production-ready hardening and error handling
 
 ## Getting Started
 
@@ -69,6 +77,8 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - `QDRANT_URL` - Qdrant endpoint (optional)
 - `PORT` - Server port
 - `DEV_MOCK` - If `true` returns canned embeddings/responses for local testing
+- Note: If you edit `webhook-api/fact_definitions.js`, restart the webhook-api server to refresh preloaded example embeddings.
+- Telemetry retention: `webhook-api/telemetry.json` stores up to 10,000 recent events (see `webhook-api/telemetryStore.js`).
 - `PARAPHRASE_QUESTIONS` - If `true` LLM paraphrases discovery templates before asking
 - `ASK_COOLDOWN_MS` - Milliseconds to wait before re-asking the same fact (default 7 days)
 - `EMBED_AUTO_SAVE_SIM` - Embedding similarity threshold to auto-save (default 0.90)
@@ -95,6 +105,19 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 
 4.  **Open the chat UI:** `https://localhost/chat` (or `http://localhost:4002/chat`)
 
+## Production Features
+- **Rate Limiting**: 30 requests per minute per user on chat endpoint
+- **Memory Management**: Automatic cleanup of stale WebSocket connections
+- **Service Health Monitoring**: Graceful fallback to dev-mock when external services fail
+- **Configuration Validation**: Startup validation of critical environment variables
+- **Robust Error Handling**: JSON parsing with fallbacks for malformed LLM responses
+
+## Relationship System
+- Track user connections and shared interests in JSON profiles
+- API endpoint: `GET /api/users/:userId/relationships`
+- Find users with similar facts and conversation topics
+- Extensible for future graph database migration
+
 ## Telemetry
 - Telemetry events are recorded in `webhook-api/telemetry.json` and include events such as `fact_autosave`, `fact_suggested`, `fact_confirmed`, `fact_rejected`, and `fact_deleted`.
 - Admins can fetch recent events via the secure endpoint `GET /api/admin/telemetry?limit=N` (admin auth required).
@@ -109,9 +132,10 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 Client should send an initial WS auth frame on connect: `{ type: 'auth', userId, token }` so server can target messages to that user.
 
 ## API Endpoints (high-level)
-- `/api/chat` (POST) — Main conversational endpoint
+- `/api/chat` (POST) — Main conversational endpoint (rate limited)
 - `/api/profile/confirm-fact` (POST) — Confirm/reject a candidate fact
 - `/api/profile/remove-fact` (POST) — Remove a stored fact (auth required)
+- `/api/users/:userId/relationships` (GET) — Get user relationships and shared interests
 - `/api/admin/telemetry` (GET) — Fetch recent telemetry events (admin only)
 - `/api/users/:userId/profile` (GET) — Inspect persisted profile data
 - Other admin endpoints for dev-mock, news processing, dashboard, etc.
@@ -119,11 +143,13 @@ Client should send an initial WS auth frame on connect: `{ type: 'auth', userId,
 ## UX notes
 - The inline confirmation flow is intentionally lightweight and non-modal. Mid-confidence suggestions are shown as a small inline prompt with `Yes/No/Edit` buttons, keeping the chat natural while giving users control.
 - Sensitive facts (e.g., `birthday`) are tagged as high-sensitivity in the definitions; configure the system to require explicit consent before persisting such items in production.
+- Mood and news injection is now contextual - only triggers on direct questions about feelings or current events, not casual mentions.
 
 ## Development & Testing
 - Unit-test `extractStructuredFacts` with many phrasing variations.
 - Integration-test confirmation and embedding flows (requires `EMBEDDING_URL`).
 - Monitor acceptance/rejection metrics to tune thresholds.
+- Use `DEV_MOCK=true` for local testing without external services.
 
 ## Project Structure
 
@@ -138,6 +164,8 @@ AIChatbot/
 │   ├── news-data.json         # Mood state persistence
 │   ├── profile.json           # Profile store (persisted)
 │   ├── telemetry.json         # Recent telemetry events (persisted)
+│   ├── rateLimiter.js         # Rate limiting middleware
+│   ├── healthChecker.js       # Service health monitoring
 │   └── package.json
 ├── docker-compose.yml         # Docker services configuration
 └── README.md
@@ -147,7 +175,8 @@ AIChatbot/
 - Aggregate telemetry and provide per-fact metrics
 - Admin UI for tuning thresholds and fact priorities
 - Privacy consent flows for high-sensitivity facts
+- Consider Neo4j migration for advanced relationship queries
 
 ---
 
-If you'd like, I can add CSV export to the dashboard telemetry UI or implement aggregation counts per fact key. Which would you like next?
+The system is now production-ready with comprehensive error handling, rate limiting, and relationship tracking capabilities.

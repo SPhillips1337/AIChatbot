@@ -19,6 +19,7 @@ const { WebSocketServer } = require('ws');
 const { QdrantClient } = require('@qdrant/js-client-rest');
 const NewsProcessor = require('./news-processor');
 const accountStore = require('./accountStore');
+const rateLimit = require('./rateLimiter');
 
 // Configuration
 const config = {
@@ -33,6 +34,12 @@ const config = {
 
 let devMock = process.env.DEV_MOCK === 'true';
 console.log('DEV_MOCK:', devMock);
+
+// Validate critical configuration
+if (!devMock && (!config.llmUrl.startsWith('http') || !config.embeddingUrl.startsWith('http'))) {
+  console.error('ERROR: LLM_URL and EMBEDDING_URL must be valid HTTP URLs when DEV_MOCK=false');
+  process.exit(1);
+}
 
 // Initialize QDRANT client
 const qdrant = new QdrantClient({ url: config.qdrantUrl });
@@ -296,14 +303,159 @@ function resetIdleTimeout() {
 
 
 // Map of userId => ws to target messages to a specific user
+// Per-user proactive/idle state map
+const userStates = new Map();
+
+function makeAnonId() {
+  return 'anon_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+}
+
+function getOrCreateUserState(key, ws = null) {
+  if (!key) return null;
+  if (!userStates.has(key)) {
+    userStates.set(key, { idleTimeout: null, proactiveTimeout: null, waitingForResponse: false, checkInSent: false, lastMessage: null, ws: ws || null, greeted: false });
+  }
+  const state = userStates.get(key);
+  if (ws) state.ws = ws;
+  return state;
+}
+
+function stopProactiveThoughtsFor(key) {
+  const state = userStates.get(key);
+  if (!state) return;
+  if (state.proactiveTimeout) {
+    clearTimeout(state.proactiveTimeout);
+    state.proactiveTimeout = null;
+    console.log('Proactive thoughts stopped for', key);
+  }
+}
+
+function startProactiveThoughtsFor(key) {
+  const state = getOrCreateUserState(key);
+  if (!state) return;
+  if (state.proactiveTimeout) return;
+
+  console.log('Proactive thoughts started for', key);
+  // Send initial thought
+  sendInitialThoughtFor(key);
+
+  // Set up check-in after configured delay
+  state.proactiveTimeout = setTimeout(() => {
+    if (state.waitingForResponse && !state.checkInSent) {
+      sendCheckInFor(key);
+    }
+  }, parseInt(process.env.PROACTIVE_CHECKIN_MS) || 300000);
+}
+
+async function sendInitialThoughtFor(key) {
+  const state = userStates.get(key);
+  if (!state) return;
+  if (state.waitingForResponse) return;
+
+  try {
+    const thought = await generateProactiveThought(key && !key.startsWith('anon_') ? key : null);
+
+    const ws = state.ws;
+    if (thought && typeof thought === 'object' && thought.key) {
+      console.log(`Sending discovery question to ${key} for key ${thought.key}: ${thought.question}`);
+      if (ws && ws.readyState === require('ws').OPEN) {
+        ws.send(JSON.stringify({ sender: 'AI', type: 'discovery_question', key: thought.key, message: thought.question, timestamp: new Date().toISOString() }));
+      } else {
+        // Store undelivered thought for this user if socket not available
+        if (key && !key.startsWith('anon_')) {
+          storeThought(key, JSON.stringify({ type: 'discovery_question', key: thought.key, message: thought.question }));
+          console.log('Stored discovery question for', key);
+        }
+      }
+    } else {
+      console.log(`Sending proactive message to ${key}: ${thought}`);
+      if (ws && ws.readyState === require('ws').OPEN) {
+        ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: thought, timestamp: new Date().toISOString() }));
+      } else {
+        if (key && !key.startsWith('anon_')) {
+          storeThought(key, JSON.stringify({ type: 'proactive_message', message: thought }));
+          console.log('Stored proactive message for', key);
+        }
+      }
+    }
+
+    state.waitingForResponse = true;
+    state.lastMessage = Date.now();
+  } catch (e) {
+    console.error('Error sending initial thought for', key, e.message || e);
+  }
+}
+
+function sendCheckInFor(key) {
+  const state = userStates.get(key);
+  if (!state) return;
+  console.log('Sending check-in to', key);
+  const checkInMessage = "Are you still there? No worries if you're busy - I'll wait quietly until you're ready to chat.";
+  const ws = state.ws;
+  if (ws && ws.readyState === require('ws').OPEN) {
+    ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: checkInMessage, timestamp: new Date().toISOString() }));
+  }
+  state.checkInSent = true;
+
+  // Wait another configured quiet duration, then go quiet
+  setTimeout(() => {
+    if (state.waitingForResponse) {
+      console.log('Going quiet for', key, '- user appears to be away');
+      const quietMessage = "I'll wait here quietly. Just say hello when you're ready to chat again! 😊";
+      if (ws && ws.readyState === require('ws').OPEN) {
+        ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: quietMessage, timestamp: new Date().toISOString() }));
+      }
+      stopProactiveThoughtsFor(key);
+    }
+  }, parseInt(process.env.PROACTIVE_QUIET_MS) || 120000);
+}
+
+function resetIdleTimeoutFor(key) {
+  const state = getOrCreateUserState(key);
+  if (!state) return;
+
+  // Reset conversation state - user is active
+  state.waitingForResponse = false;
+  state.checkInSent = false;
+
+  stopProactiveThoughtsFor(key);
+  if (state.idleTimeout) {
+    clearTimeout(state.idleTimeout);
+  }
+  state.idleTimeout = setTimeout(() => {
+    console.log('User idle, starting gentle proactive engagement for', key);
+    startProactiveThoughtsFor(key);
+  }, parseInt(process.env.IDLE_TIMEOUT_MS) || 600000);
+}
+
 const userSockets = new Map();
+
+// Cleanup stale connections every 10 minutes
+setInterval(() => {
+  const staleThreshold = Date.now() - (10 * 60 * 1000); // 10 minutes
+  
+  for (const [userId, ws] of userSockets.entries()) {
+    if (ws.readyState !== require('ws').OPEN || ws._lastActivity < staleThreshold) {
+      userSockets.delete(userId);
+      if (userStates.has(userId)) {
+        clearTimeout(userStates.get(userId).idleTimeout);
+        userStates.delete(userId);
+      }
+    }
+  }
+}, 10 * 60 * 1000);
 
 wss.on('connection', (ws) => {
   console.log('Client connected to WebSocket');
   ws.isAlive = true;
   ws.userId = null;
+  // assign a stable anon client id for this socket so per-socket timers persist
+  ws._clientId = ws._clientId || makeAnonId();
+  // create per-user (or anon) state and attach ws so proactive timers target this socket
+  getOrCreateUserState(ws._clientId, ws);
+  resetIdleTimeoutFor(ws._clientId);
 
-  ws.on('message', (message) => {
+  ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
 
@@ -312,14 +464,48 @@ wss.on('connection', (ws) => {
         // Verify token if provided
         const token = data.token;
         if (token && accountStore.verifySessionToken(data.userId, token)) {
+          // clear anonymous greet timer if present
+          if (ws._greetTimer) { clearTimeout(ws._greetTimer); ws._greetTimer = null; }
+
           ws.userId = data.userId;
           userSockets.set(data.userId, ws);
           console.log('WebSocket authenticated for user:', data.userId);
+          // create per-user state and reset idle timer
+          const state = getOrCreateUserState(data.userId, ws);
+          // sync greeted flag from persisted profile if available
+          try {
+            const profile = await profileStore.getProfile ? profileStore.getProfile(data.userId) : null;
+            if (profile && profile.greeted) state.greeted = true;
+          } catch (e) { /* ignore */ }
+          resetIdleTimeoutFor(data.userId);
+          // Send greeting only once per user (persist on profile)
+          if (!state.greeted) {
+            try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) {}
+            state.greeted = true;
+            try {
+              const p = getOrCreateProfile(data.userId);
+              p.greeted = true;
+              profileStore.saveProfile(data.userId, p);
+            } catch (e) { console.warn('Failed to persist greeted flag', e.message || e); }
+          }
         } else if (!token) {
+          // clear anonymous greet timer if present
+          if (ws._greetTimer) { clearTimeout(ws._greetTimer); ws._greetTimer = null; }
           // Allow anonymous bind without token (best-effort)
           ws.userId = data.userId;
           userSockets.set(data.userId, ws);
           console.log('WebSocket associated with user (no token):', data.userId);
+          const state = getOrCreateUserState(data.userId, ws);
+          resetIdleTimeoutFor(data.userId);
+          if (!state.greeted) {
+            try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) {}
+            state.greeted = true;
+            try {
+              const p = getOrCreateProfile(data.userId);
+              p.greeted = true;
+              profileStore.saveProfile(data.userId, p);
+            } catch (e) { console.warn('Failed to persist greeted flag', e.message || e); }
+          }
         }
         return;
       }
@@ -327,7 +513,16 @@ wss.on('connection', (ws) => {
       const dataObj = data;
       // Check for activity signals from the client
       if (dataObj.type === 'user_typing' || dataObj.type === 'user_activity') {
-        resetIdleTimeout();
+        // Ignore keepalive pings for idle detection (they're only to keep reverse proxies from closing sockets)
+        const reason = dataObj.reason || '';
+        if (dataObj.type === 'user_activity' && reason === 'keepalive') {
+          // mark socket alive but do not reset the idle timer
+          ws.isAlive = true;
+          return;
+        }
+        // Otherwise, treat as real activity and reset idle timer for this user/socket
+        const key = ws.userId || (ws._clientId = ws._clientId || makeAnonId());
+        resetIdleTimeoutFor(key);
         return;
       }
 
@@ -339,9 +534,21 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     console.log('Client disconnected');
     if (ws.userId) userSockets.delete(ws.userId);
+    if (ws._greetTimer) clearTimeout(ws._greetTimer);
   });
 
-  ws.send(JSON.stringify({ sender: 'AI', message: 'Hello! I\'m Aura. Feel free to start a conversation whenever you\'re ready.' }));
+  // Defer sending the initial greeting until we know if the client will authenticate.
+  // If the client authenticates, we'll send greeting only once per user (tracked in userState.greeted).
+  ws._greetTimer = setTimeout(() => {
+    try {
+      // Only send greeting to unauthenticated sockets (best-effort)
+      if (!ws.userId && ws.readyState === require('ws').OPEN) {
+        ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." }));
+        ws._greeted = true;
+        console.log('Sent anonymous greeting to socket');
+      }
+    } catch (e) { console.warn('Greeting send failed', e.message || e); }
+  }, 1000);
 });
 
 function broadcast(data) {
@@ -715,6 +922,21 @@ app.get('/api/users/:userId/profile', async (req, res) => {
   } else {
     res.status(404).json({ message: 'User profile not found' });
   }
+});
+
+// API endpoint for user relationships
+app.get('/api/users/:userId/relationships', requireAuth(), (req, res) => {
+  const { userId } = req.params;
+  const { type } = req.query;
+  
+  if (req.account.userId !== userId && req.account.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  const relationships = profileStore.getRelationships(userId, type);
+  const sharedInterests = profileStore.findUsersWithSharedInterests(userId);
+  
+  res.json({ relationships, sharedInterests });
 });
 
 // API endpoint for all user profiles
@@ -1345,7 +1567,7 @@ function analyzeUserSentiment(message) {
   return Math.max(-2, Math.min(2, sentiment)); // Cap at +/-2 per message
 }
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
   try {
     const { message, userId } = req.body;
     
@@ -1364,8 +1586,8 @@ app.post('/api/chat', async (req, res) => {
     const role = ensureAccountRole(authedAccount);
 
     const lowerMessage = message.toLowerCase();
-    // Reset the idle timer on every user interaction
-    resetIdleTimeout();
+    // Reset the idle timer on every user interaction (per-user)
+    resetIdleTimeoutFor(userId);
     
     // 1. Define the system prompt with user personality context + AI opinions
     const userProfile = getOrCreateProfile(userId);
@@ -1454,7 +1676,8 @@ You form and evolve opinions based on news and user interactions.`
 
     if (factAnswer) {
       botResponse = factAnswer;
-    } else if (lowerMessage.includes('feel') || lowerMessage.includes('mood')) {
+    } else if (lowerMessage.includes('how are you feeling') || lowerMessage.includes('what\'s your mood') || (lowerMessage.includes('feel') && lowerMessage.includes('?'))) {
+      // Only inject mood for direct mood questions, not casual mentions of "feel"
       const mood = await aiTools.checkMood();
       const news = await aiTools.getRecentNews(2);
       
@@ -1467,7 +1690,8 @@ You form and evolve opinions based on news and user interactions.`
       } else {
         botResponse = "I've been scanning the feeds but nothing noteworthy has stuck just yet.";
       }
-    } else if (mentionsNews) {
+    } else if (mentionsNews && (lowerMessage.includes('current') || lowerMessage.includes('events') || lowerMessage.includes('happening'))) {
+      // Only append news context when user is discussing current events, not casual mentions
       const news = await aiTools.getRecentNews(2);
       if (news.length > 0) {
         const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
@@ -1869,6 +2093,7 @@ server.listen(config.port, async () => {
     await newsProcessor.processNewsFeeds();
   }, 30 * 60 * 1000);
   
-  // Start proactive thoughts when the server boots up
-  startProactiveThoughts();
+  // Per-user proactive timers are used now; do not start global proactive thoughts on boot.
+  // Individual user idle timers start when a WS client connects or authenticates.
+  // startProactiveThoughts(); (disabled)
 });

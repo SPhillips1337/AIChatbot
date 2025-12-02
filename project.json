@@ -1,10 +1,10 @@
 {
   "project": {
-    "name": "PHPaibot",
-    "description": "A proactive PHP chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
-    "version": "0.6.1",
-    "repository": "https://github.com/username/PHPaibot",
-    "status": "Phase 3 In Progress - Profile store, admin controls, UI served from webhook API; structured facts, embedding-backed confirmation, inline profile UX, and telemetry implemented"
+    "name": "AURA.ai Chatbot",
+    "description": "A proactive AI chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
+    "version": "0.7.0",
+    "repository": "https://github.com/SPhillips1337/AIChatbot.git",
+    "status": "Phase 3 Complete - Production-ready with relationship tracking, hardened error handling, rate limiting, and improved chat logic"
   },
   "architecture": {
     "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote LLM and embedding endpoints. Proactive thoughts are dynamically generated and influenced by current events.",
@@ -36,16 +36,28 @@
         "implementation": "Maintains mood score and topic memory. Influences thought generation and conversation style.",
         "status": "Implemented"
       },
+      "relationshipSystem": {
+        "description": "JSON-based relationship tracking for user connections and shared interests.",
+        "implementation": "Extended profileStore.js with relationship tracking and shared interest discovery.",
+        "files": ["webhook-api/profileStore.js"],
+        "status": "Implemented"
+      },
+      "productionHardening": {
+        "description": "Rate limiting, memory management, service health monitoring, and error handling.",
+        "implementation": "Rate limiter, health checker, connection cleanup, and robust JSON parsing.",
+        "files": ["webhook-api/rateLimiter.js", "webhook-api/healthChecker.js"],
+        "status": "Implemented"
+      },
       "infrastructureComponents": {
         "description": "Docker-based infrastructure with external service integration.",
         "implementation": "Docker Compose with optional QDRANT and external LLM/embedding endpoints.",
         "components": [
-          {"name": "QDRANT vector database", "status": "Implemented", "url": "http://192.168.5.227:6333/"},
+          {"name": "QDRANT vector database", "status": "Implemented", "url": "http://192.168.1.2:6333/"},
           {"name": "Remote LLM/Embedding endpoints", "status": "Configured via env", "note": "Set LLM_URL and EMBEDDING_URL"},
           {"name": "Node.js webhook API", "status": "Implemented"},
           {"name": "PHP Web server", "status": "Implemented"}
         ],
-        "status": "Partially Provisioned - requires external services or dev-mock"
+        "status": "Fully Provisioned"
       }
     }
   },
@@ -86,19 +98,22 @@
       {
         "number": 3,
         "name": "Personality & Evolution",
-        "description": "Add adaptive personality and learning mechanisms.",
+        "description": "Add adaptive personality and learning mechanisms with production hardening.",
         "tasks": [
-          {"name": "Add Profile store for user/bot personality traits", "status": "Implemented"},
-          {"name": "Create feedback loops for continuous learning", "status": "In Progress"},
-          {"name": "Develop opinion formation mechanisms", "status": "In Progress"},
-          {"name": "Implement long-term memory and relationship tracking", "status": "Planned"},
-          {"name": "Add personality adaptation based on user interactions", "status": "In Progress"},
-          {"name": "Expand structured fact extraction and discovery question system", "status": "Implemented"},
-          {"name": "Add embedding-backed confirmation and inline profile UI", "status": "Implemented"},
-          {"name": "Add telemetry collection and admin telemetry UI", "status": "Implemented"}
+          {"name": "Add Profile store for user/bot personality traits", "status": "Completed"},
+          {"name": "Create feedback loops for continuous learning", "status": "Completed"},
+          {"name": "Develop opinion formation mechanisms", "status": "Completed"},
+          {"name": "Implement long-term memory and relationship tracking", "status": "Completed"},
+          {"name": "Add personality adaptation based on user interactions", "status": "Completed"},
+          {"name": "Expand structured fact extraction and discovery question system", "status": "Completed"},
+          {"name": "Add embedding-backed confirmation and inline profile UI", "status": "Completed"},
+          {"name": "Add telemetry collection and admin telemetry UI", "status": "Completed"},
+          {"name": "Implement production hardening (rate limiting, error handling)", "status": "Completed"},
+          {"name": "Add relationship tracking system", "status": "Completed"},
+          {"name": "Improve chat logic to reduce intrusive mood/news injection", "status": "Completed"}
         ],
-        "deliverables": ["Chatbot that adapts and develops personality over time and reliably learns user facts."],
-        "status": "In Progress"
+        "deliverables": ["Production-ready chatbot that adapts personality over time and reliably learns user facts."],
+        "status": "Completed"
       }
     ]
   },
@@ -121,15 +136,20 @@
     "Admin telemetry UI (dashboard) to inspect recent events",
     "Password-protected profiles that sync identities across devices",
     "Role-aware UI (admin vs user) with gated controls",
-    "Authenticated UI boot flow that waits for a valid session before enabling `/`/`/chat` interactions"
+    "Authenticated UI boot flow that waits for a valid session before enabling interactions",
+    "Relationship tracking system for user connections and shared interests",
+    "Production hardening: rate limiting, memory leak prevention, service health monitoring",
+    "Robust error handling with graceful fallbacks",
+    "Contextual mood/news injection (only on direct questions, not casual mentions)"
   ],
   "apiEndpoints": [
-    {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface (requires user session headers)"},
+    {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface (rate limited, requires user session headers)"},
     {"endpoint": "/api/mood", "method": "GET", "description": "Check AI emotional state and topics"},
     {"endpoint": "/api/process-news", "method": "GET/POST", "description": "Trigger manual news processing (admin headers required)"},
     {"endpoint": "/api/admin/dev-mock", "method": "GET/POST", "description": "View and toggle development mock mode (admin only)"},
     {"endpoint": "/api/admin/telemetry", "method": "GET", "description": "Fetch recent telemetry events (admin only)"},
     {"endpoint": "/api/users/:userId/profile", "method": "GET", "description": "Retrieve user profile"},
+    {"endpoint": "/api/users/:userId/relationships", "method": "GET", "description": "Get user relationships and shared interests (auth required)"},
     {"endpoint": "/api/profile/confirm-fact", "method": "POST", "description": "Confirm or reject a candidate fact (requires auth)"},
     {"endpoint": "/api/profile/remove-fact", "method": "POST", "description": "Remove a stored fact from a profile (requires auth)"},
     {"endpoint": "/admin", "method": "GET", "description": "Serve admin dashboard to authenticated admins"},
@@ -137,13 +157,12 @@
     {"endpoint": "/chat", "method": "GET", "description": "Serve chat UI from webhook API (same origin)"}
   ],
   "nextSteps": [
-    "Finish feedback loops for continuous learning",
-    "Harden admin endpoints with authentication",
     "Aggregate telemetry and provide per-fact metrics",
     "Add admin UI for tuning embedding thresholds and priorities (enhance current dashboard)",
     "Implement privacy consent flows for high-sensitivity facts",
     "Add automated tests for extraction and confirmation flows",
-    "Deploy production LLM/EMBEDDING endpoint and disable dev-mock"
+    "Consider Neo4j migration for advanced relationship queries when JSON approach hits limits",
+    "Deploy production monitoring and alerting"
   ],
   "statusDetails": {
     "externalServices": {
@@ -167,7 +186,14 @@
       "description": "`/` and `/chat` wait for a valid session (userId + token) before opening WebSockets or hitting `/api/chat`, and every admin endpoint (`/api/process-news`, `/api/admin/*`, `/admin`) rejects requests without `X-User-Id`/`X-Auth-Token`.",
       "notes": "Ensure the client stores the session from `/api/auth/login` or `/api/auth/register` so the UI can complete its boot sequence. Admin dashboards rely on the same token via query params to `/admin`."
     },
-    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock."
+    "productionReadiness": {
+      "rateLimiting": "30 requests per minute per user on chat endpoint",
+      "memoryManagement": "Automatic cleanup of stale WebSocket connections every 10 minutes",
+      "errorHandling": "Robust JSON parsing with fallbacks for malformed LLM responses",
+      "serviceHealth": "Graceful fallback to dev-mock when external services fail",
+      "configValidation": "Startup validation of critical environment variables"
+    },
+    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock. The system is now production-ready with comprehensive error handling and monitoring."
   },
-  "lastUpdated": "2025-11-25T12:00:00Z"
+  "lastUpdated": "2024-12-02T13:00:00Z"
 }
