@@ -103,7 +103,21 @@ class NewsProcessor {
         cleanResponse = jsonMatch ? jsonMatch[0] : '{"mood": 0, "topics": ["General"], "reaction": "Unable to analyze"}';
       }
       
-      const analysis = JSON.parse(cleanResponse);
+      // Clean common JSON formatting issues
+      cleanResponse = cleanResponse
+        .replace(/:\s*\+(\d+)/g, ': $1')  // Fix +numbers
+        .replace(/:\s*-(\d+)/g, ': -$1')  // Ensure -numbers are valid
+        .replace(/,\s*}/g, '}')           // Remove trailing commas
+        .replace(/,\s*]/g, ']');          // Remove trailing commas in arrays
+      
+      let analysis;
+      try {
+        analysis = JSON.parse(cleanResponse);
+      } catch (parseError) {
+        console.warn('JSON parse failed, using fallback:', parseError.message);
+        console.warn('Problematic JSON:', cleanResponse.substring(0, 100));
+        analysis = { mood: 0, topics: ['General'], reaction: 'Parse error - using fallback' };
+      }
       
       // Validate analysis structure
       if (typeof analysis.mood !== 'number') analysis.mood = 0;
