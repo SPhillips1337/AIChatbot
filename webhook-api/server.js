@@ -704,7 +704,8 @@ async function generateResponse(messages) {
     const apiUrl = `${config.llmUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
     const requestBody = {
-      model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
+      //model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
+      model: "ikiru/Dolphin-Mistral-24B-Venice-Edition:latest", // Use the specified Ollama model
       messages: messages, // Use the full message history
       temperature: 0.7,
       max_tokens: 500,
