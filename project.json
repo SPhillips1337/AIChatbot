@@ -2,9 +2,9 @@
   "project": {
     "name": "AURA.ai Chatbot",
     "description": "A proactive AI chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "repository": "https://github.com/SPhillips1337/AIChatbot.git",
-    "status": "Phase 3 Complete - Production-ready with relationship tracking, hardened error handling, rate limiting, and improved chat logic"
+    "status": "Phase 3 Complete - Production-ready with external Qdrant cloud database, relationship tracking, hardened error handling, rate limiting, and improved chat logic"
   },
   "architecture": {
     "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote LLM and embedding endpoints. Proactive thoughts are dynamically generated and influenced by current events.",
@@ -49,10 +49,10 @@
         "status": "Implemented"
       },
       "infrastructureComponents": {
-        "description": "Docker-based infrastructure with external service integration.",
-        "implementation": "Docker Compose with optional QDRANT and external LLM/embedding endpoints.",
+        "description": "Cloud-based infrastructure with external service integration.",
+        "implementation": "External Qdrant cloud database with remote LLM/embedding endpoints.",
         "components": [
-          {"name": "QDRANT vector database", "status": "Implemented", "url": "http://192.168.1.2:6333/"},
+          {"name": "QDRANT cloud database", "status": "Implemented", "url": "External cloud instance", "note": "Migrated from local to cloud with API key authentication"},
           {"name": "Remote LLM/Embedding endpoints", "status": "Configured via env", "note": "Set LLM_URL and EMBEDDING_URL"},
           {"name": "Node.js webhook API", "status": "Implemented"},
           {"name": "PHP Web server", "status": "Implemented"}
@@ -140,7 +140,9 @@
     "Relationship tracking system for user connections and shared interests",
     "Production hardening: rate limiting, memory leak prevention, service health monitoring",
     "Robust error handling with graceful fallbacks",
-    "Contextual mood/news injection (only on direct questions, not casual mentions)"
+    "Contextual mood/news injection (only on direct questions, not casual mentions)",
+    "External Qdrant cloud database integration with API key authentication",
+    "Vector size validation and automatic adjustment for embedding compatibility"
   ],
   "apiEndpoints": [
     {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface (rate limited, requires user session headers)"},
@@ -166,15 +168,16 @@
   ],
   "statusDetails": {
     "externalServices": {
-      "qdrant": "Specify QDRANT_URL (e.g. http://host:6333) - required",
+      "qdrant": "Specify QDRANT_URL (e.g. https://cluster-id.region.aws.cloud.qdrant.io) and QDRANT_API_KEY - required",
       "llm": "Specify LLM_URL (OpenAI-compatible) - required if dev-mock is disabled",
       "embeddings": "Specify EMBEDDING_URL (OpenAI-compatible) - required if dev-mock is disabled",
       "searxng": "Optional - URL for RSS parsing if used"
     },
     "requiredEnv": [
       "LLM_URL",
-      "EMBEDDING_URL",
+      "EMBEDDING_URL", 
       "QDRANT_URL",
+      "QDRANT_API_KEY",
       "PORT (optional)",
       "DEV_MOCK (optional)",
       "PARAPHRASE_QUESTIONS (optional)",
@@ -193,7 +196,7 @@
       "serviceHealth": "Graceful fallback to dev-mock when external services fail",
       "configValidation": "Startup validation of critical environment variables"
     },
-    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock. The system is now production-ready with comprehensive error handling and monitoring."
+    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock. The system now uses external Qdrant cloud database with API key authentication and automatic vector size validation. The system is production-ready with comprehensive error handling and monitoring."
   },
-  "lastUpdated": "2024-12-02T13:00:00Z"
+  "lastUpdated": "2024-12-04T18:00:00Z"
 }

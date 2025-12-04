@@ -143,10 +143,22 @@ class NewsProcessor {
     try {
       const embedding = await this.generateEmbedding(`${item.title} ${analysis.reaction}`);
       
+      // Ensure vector size matches collection (1024 for current setup)
+      const expectedSize = 1024;
+      let finalEmbedding = embedding;
+      if (embedding && embedding.length !== expectedSize) {
+        console.warn(`News vector size mismatch: got ${embedding.length}, expected ${expectedSize}. Adjusting...`);
+        if (embedding.length > expectedSize) {
+          finalEmbedding = embedding.slice(0, expectedSize);
+        } else {
+          finalEmbedding = [...embedding, ...new Array(expectedSize - embedding.length).fill(0)];
+        }
+      }
+      
       await this.qdrant.upsert(this.config.collectionName, {
         points: [{
           id: Date.now(),
-          vector: embedding,
+          vector: finalEmbedding,
           payload: {
             type: 'news',
             title: item.title,

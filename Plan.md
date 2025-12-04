@@ -1,7 +1,7 @@
 # AURA.ai Development Plan (Updated)
 
 ## Purpose of this update
-This update captures the recent production hardening work including relationship tracking, error handling improvements, rate limiting, and chat logic refinements so we can pick up development later with a clear roadmap and status.
+This update captures the recent production hardening work including relationship tracking, error handling improvements, rate limiting, chat logic refinements, and migration to external Qdrant cloud database so we can pick up development later with a clear roadmap and status.
 
 ## Recent accomplishments
 - Added `webhook-api/fact_definitions.js` with a curated list of structured facts, priorities, templates, and example values.
@@ -14,10 +14,13 @@ This update captures the recent production hardening work including relationship
 - Implemented telemetry collection (`webhook-api/telemetry.json` + `telemetryStore`) and a secure admin endpoint `GET /api/admin/telemetry` plus a small telemetry UI on the admin dashboard.
 - Improved frontend WebSocket reliability: `index.html` now includes automatic reconnect with exponential backoff and periodic keepalive pings to reduce reverse-proxy disconnects.
 - Fixed news-influenced thought selection to use the most recent Qdrant news entries (sorted by `payload.timestamp`) and added selection logging for easier debugging (`webhook-api/news-processor.js`).
-- **NEW: Added relationship tracking system** - Extended profileStore.js with relationship tracking and shared interest discovery.
-- **NEW: Production hardening** - Added rate limiting (30 req/min), memory leak prevention, service health monitoring, and configuration validation.
-- **NEW: Improved chat logic** - Fixed intrusive mood/news injection to only trigger on direct questions, not casual mentions.
-- **NEW: Robust error handling** - Better JSON parsing with fallbacks for malformed LLM responses.
+- **COMPLETED**: Added relationship tracking system - Extended profileStore.js with relationship tracking and shared interest discovery.
+- **COMPLETED**: Production hardening - Added rate limiting (30 req/min), memory leak prevention, service health monitoring, and configuration validation.
+- **COMPLETED**: Improved chat logic - Fixed intrusive mood/news injection to only trigger on direct questions, not casual mentions.
+- **COMPLETED**: Robust error handling - Better JSON parsing with fallbacks for malformed LLM responses.
+- **NEW: Migrated to external Qdrant cloud database** - Updated system to use cloud-hosted Qdrant with API key authentication.
+- **NEW: Vector size validation** - Added automatic vector size validation and adjustment to prevent Bad Request errors.
+- **NEW: Environment configuration** - Created .env.example files for easier setup and deployment.
 
 ## Short-term plan (next sprint)
 1. ✅ **COMPLETED**: Tune thresholds and add production hardening features
@@ -35,6 +38,9 @@ This update captures the recent production hardening work including relationship
 - Added rate limiting middleware (`rateLimiter.js`) and service health monitoring (`healthChecker.js`).
 - Extended profileStore.js with relationship tracking capabilities and shared interest discovery.
 - Improved chat logic to be more contextual and less intrusive with mood/news injection.
+- **NEW: Migrated to external Qdrant cloud database** with API key authentication for improved scalability and reliability.
+- **NEW: Added vector size validation** to automatically handle embedding dimension mismatches and prevent storage errors.
+- **NEW: Created environment configuration templates** (.env.example files) for easier deployment setup.
 
 ## Medium-term plan
 1. Create an admin UI for tuning thresholds and viewing per-fact metrics (accept/confirm/reject counts) — extend the current dashboard telemetry card.
