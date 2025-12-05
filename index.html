@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
         :root {
             --vh: 1vh;
         }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background-color: #f4f7f9;
@@ -19,6 +21,7 @@
             padding-bottom: env(safe-area-inset-bottom, 0);
             overflow-x: hidden;
         }
+
         .menu-bar {
             background: #007bff;
             color: white;
@@ -26,30 +29,35 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             gap: 16px;
             flex-wrap: wrap;
         }
+
         .brand {
             display: flex;
             flex-direction: column;
             gap: 4px;
         }
+
         .brand h1 {
             margin: 0;
             font-size: 1.15em;
             letter-spacing: 0.04em;
         }
+
         .brand #user-greeting {
             margin: 0;
             font-size: 0.85em;
             opacity: 0.9;
         }
+
         .menu-links {
             display: flex;
             gap: 12px;
             align-items: center;
         }
+
         .menu-links a {
             color: white;
             text-decoration: none;
@@ -58,17 +66,20 @@
             transition: background 0.2s;
             border: 1px solid transparent;
         }
+
         .menu-links a:hover {
-            background: rgba(255,255,255,0.2);
-            border-color: rgba(255,255,255,0.35);
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.35);
         }
+
         .menu-links a.danger {
             background: rgba(255, 68, 68, 0.2);
             border-color: rgba(255, 68, 68, 0.5);
         }
+
         .menu-toggle {
             display: none;
-            border: 1px solid rgba(255,255,255,0.6);
+            border: 1px solid rgba(255, 255, 255, 0.6);
             background: transparent;
             color: white;
             padding: 6px 12px;
@@ -76,6 +87,7 @@
             font-size: 1.1rem;
             cursor: pointer;
         }
+
         .chat-wrapper {
             flex: 1;
             display: flex;
@@ -83,6 +95,7 @@
             align-items: center;
             padding: 20px;
         }
+
         #chat-container {
             width: 100%;
             max-width: 600px;
@@ -94,58 +107,70 @@
             flex-direction: column;
             overflow: hidden;
         }
+
         #chat-container.full-height {
             height: calc(100vh - 160px);
             max-width: 100%;
         }
+
         #chat-box {
             flex-grow: 1;
             padding: 20px;
             overflow-y: auto;
             border-bottom: 1px solid #e0e0e0;
         }
+
         .message {
             margin-bottom: 15px;
             display: flex;
             flex-direction: column;
         }
+
         .message .sender {
             font-weight: bold;
             font-size: 0.9em;
             margin-bottom: 4px;
             color: #333;
         }
+
         .message .text {
             padding: 10px 15px;
             border-radius: 18px;
             max-width: 80%;
             line-height: 1.5;
         }
+
         .ai-message .sender {
             color: #007bff;
         }
+
         .ai-message .text {
             background-color: #e9f5ff;
             color: #333;
             align-self: flex-start;
         }
+
         .user-message {
             align-items: flex-end;
         }
+
         .user-message .sender {
             color: #28a745;
         }
+
         .user-message .text {
             background-color: #28a745;
             color: #fff;
             align-self: flex-end;
         }
+
         .error-message {
             text-align: center;
             color: #dc3545;
             font-style: italic;
             padding: 10px;
         }
+
         #input-area {
             display: flex;
             padding: 15px;
@@ -154,6 +179,7 @@
             box-sizing: border-box;
             gap: 10px;
         }
+
         #message-input {
             flex-grow: 1;
             border: 1px solid #ccc;
@@ -165,9 +191,11 @@
             max-width: 100%;
             box-sizing: border-box;
         }
+
         #message-input:focus {
             border-color: #007bff;
         }
+
         #send-button {
             background-color: #007bff;
             color: #fff;
@@ -182,19 +210,23 @@
             justify-content: center;
             align-items: center;
         }
+
         #send-button:hover {
             background-color: #0056b3;
         }
+
         #status {
             padding: 5px 15px;
             font-size: 0.8em;
             color: #666;
             text-align: center;
         }
+
         #user-greeting {
             font-size: 0.9em;
             opacity: 0.85;
         }
+
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -207,24 +239,29 @@
             justify-content: center;
             z-index: 2000;
         }
+
         .modal-overlay.hidden {
             display: none;
         }
+
         .hidden {
             display: none !important;
         }
+
         .modal-content {
             background: #fff;
             padding: 30px;
             border-radius: 12px;
             width: min(420px, calc(100vw - 40px));
-            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
             text-align: center;
             box-sizing: border-box;
         }
+
         .modal-content h2 {
             margin-top: 0;
         }
+
         .modal-content input {
             width: 100%;
             max-width: 100%;
@@ -235,6 +272,7 @@
             margin: 15px 0;
             box-sizing: border-box;
         }
+
         .modal-content button {
             width: 100%;
             padding: 12px;
@@ -245,22 +283,40 @@
             font-size: 1em;
             cursor: pointer;
         }
+
         @keyframes input-shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-4px); }
-            50% { transform: translateX(4px); }
-            75% { transform: translateX(-4px); }
-            100% { transform: translateX(0); }
+            0% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-4px);
+            }
+
+            50% {
+                transform: translateX(4px);
+            }
+
+            75% {
+                transform: translateX(-4px);
+            }
+
+            100% {
+                transform: translateX(0);
+            }
         }
+
         .shake {
             animation: input-shake 0.3s;
         }
+
         .auth-tabs {
             display: flex;
             justify-content: center;
             gap: 10px;
             margin-bottom: 10px;
         }
+
         .auth-tab {
             flex: 1;
             border: 1px solid #d0d0d0;
@@ -270,111 +326,159 @@
             cursor: pointer;
             transition: background 0.2s, border 0.2s;
         }
+
         .auth-tab.active {
             background: #007bff;
             color: #fff;
             border-color: #007bff;
         }
+
         .auth-error {
             color: #dc3545;
             margin-top: 8px;
             font-size: 0.9em;
         }
+
         .password-hint {
             font-size: 0.8em;
             color: #666;
             margin-top: -10px;
         }
+
         .hidden {
             display: none !important;
         }
+
         @media (max-width: 900px) {
             body {
                 background-color: #eef2f6;
             }
+
             .menu-bar {
                 align-items: flex-start;
             }
+
             .menu-toggle {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
+
             .menu-links {
                 width: 100%;
                 flex-direction: column;
                 gap: 8px;
                 display: none;
             }
+
             .menu-links.open {
                 display: flex;
             }
+
             .menu-links a {
                 width: 100%;
                 text-align: left;
             }
+
             .chat-wrapper {
                 padding: 10px;
                 align-items: stretch;
             }
+
             #chat-container {
                 max-width: 100%;
                 height: calc(var(--vh, 1vh) * 100 - 200px);
             }
+
             #chat-box {
                 padding: 16px;
             }
+
             #input-area {
                 flex-direction: column;
                 gap: 10px;
             }
+
             #message-input {
                 border-radius: 10px;
                 width: 100%;
             }
+
             #send-button {
                 width: 100%;
                 border-radius: 10px;
                 height: 44px;
             }
         }
-        .inline-actions { display:flex; gap:8px; margin-top:8px; }
-        .inline-actions button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; font-size:0.9em }
-        .inline-yes { background:#28a745; color:#fff }
-        .inline-no { background:#dc3545; color:#fff }
-        .inline-edit { background:#6c757d; color:#fff }
+
+        .inline-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .inline-actions button {
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9em
+        }
+
+        .inline-yes {
+            background: #28a745;
+            color: #fff
+        }
+
+        .inline-no {
+            background: #dc3545;
+            color: #fff
+        }
+
+        .inline-edit {
+            background: #6c757d;
+            color: #fff
+        }
 
         @media (max-width: 520px) {
             .brand h1 {
                 font-size: 1em;
             }
+
             .brand #user-greeting {
                 font-size: 0.8em;
             }
+
             #chat-container {
                 border-radius: 0;
                 box-shadow: none;
                 height: calc(var(--vh, 1vh) * 100 - 180px);
             }
+
             #chat-box {
                 padding: 12px;
             }
+
             .message .text {
                 max-width: 100%;
             }
+
             #status {
                 font-size: 0.85em;
             }
+
             .modal-content {
                 padding: 20px;
                 width: min(380px, calc(100vw - 24px));
             }
+
             .auth-tabs {
                 flex-direction: column;
             }
         }
     </style>
 </head>
+
 <body>
 
     <div class="menu-bar">
@@ -413,7 +517,8 @@
             </div>
             <input type="text" id="auth-username" placeholder="Display name" autocomplete="username">
             <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
-            <input type="password" id="auth-password-confirm" class="hidden" placeholder="Confirm password" autocomplete="new-password">
+            <input type="password" id="auth-password-confirm" class="hidden" placeholder="Confirm password"
+                autocomplete="new-password">
             <small class="password-hint hidden" id="password-hint">Password must be at least 6 characters.</small>
             <button id="auth-submit">Continue</button>
             <p class="auth-error hidden" id="auth-error"></p>
@@ -438,6 +543,7 @@
         let username = null;
         let userRole = 'user';
         let authToken = null;
+        let ws = null;
 
         function setViewportHeightVar() {
             const vh = window.innerHeight * 0.01;
@@ -489,7 +595,7 @@
             const dashboardLink = document.getElementById('dashboardLink');
             const menuLinks = document.getElementById('menuLinks');
             const menuToggle = document.getElementById('menuToggle');
-            let ws = null;
+            // ws is now global scope - declared above
             let isTyping = false;
 
             if (dashboardLink) {
@@ -696,7 +802,7 @@
                 addMessage(displayName || 'You', message);
                 messageInput.value = '';
                 isTyping = false;
-                
+
                 try {
                     const response = await fetch(`${API_BASE}/api/chat`, {
                         method: 'POST',
@@ -730,7 +836,7 @@
 
             function addMessage(sender, message) {
                 const messageDiv = document.createElement('div');
-                
+
                 if (sender === 'Error') {
                     messageDiv.classList.add('error-message');
                     messageDiv.textContent = message;
@@ -753,7 +859,7 @@
                     messageDiv.appendChild(senderDiv);
                     messageDiv.appendChild(textDiv);
                 }
-                
+
                 chatBox.appendChild(messageDiv);
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
@@ -782,7 +888,7 @@
                 const messageDiv = document.createElement('div');
                 const senderDiv = document.createElement('div');
                 const textDiv = document.createElement('div');
-                
+
                 messageDiv.classList.add('message', 'ai-message');
                 senderDiv.classList.add('sender');
                 textDiv.classList.add('text');
@@ -859,14 +965,15 @@
             }
 
             sendButton.addEventListener('click', sendMessage);
-            
+
             messageInput.addEventListener('keypress', (event) => {
                 if (event.key === 'Enter') {
                     sendMessage();
                 }
             });
+        }); // Close DOMContentLoaded callback - functions below need to be global for onclick handlers
 
-        // Menu functions
+        // Menu functions (must be global scope for onclick handlers)
         async function checkMood() {
             try {
                 const response = await fetch(`${API_BASE}/api/mood`);
@@ -883,7 +990,7 @@
                 return;
             }
             try {
-                const response = await fetch(`${API_BASE}/api/process-news`, { 
+                const response = await fetch(`${API_BASE}/api/process-news`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1140,75 +1247,75 @@
                     submitBtn.textContent = 'Continue';
                 }
 
-submitBtn.addEventListener('click', handleSubmit);
-                        usernameInput.addEventListener('keypress', handleKey);
-                        passwordInput.addEventListener('keypress', handleKey);
-                        confirmInput.addEventListener('keypress', handleKey);
+                submitBtn.addEventListener('click', handleSubmit);
+                usernameInput.addEventListener('keypress', handleKey);
+                passwordInput.addEventListener('keypress', handleKey);
+                confirmInput.addEventListener('keypress', handleKey);
 
-                        setMode(mode);
-                    });
-                }
-
-                const switchProfileLink = document.getElementById('switchProfileLink');
-                if (switchProfileLink) {
-                    switchProfileLink.addEventListener('click', async (event) => {
-                        event.preventDefault();
-                        const menuLinks = document.getElementById('menuLinks');
-                        if (menuLinks) menuLinks.classList.remove('open');
-
-                        // If already logged in, treat as logout action
-                        if (userId) {
-                            const doLogout = confirm('Log out of this profile?');
-                            if (!doLogout) return;
-                            // Close websocket if open
-                            try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch (e) { /* ignore */ }
-                            clearAuth();
-                            // Optionally open auth modal to allow quick re-login/switch
-                            await openAuthModal();
-                            return;
-                        }
-
-                        // Not logged in -> open login/register modal
-                        await openAuthModal();
-                    });
-                }
-
-                // Update the switch profile link label based on auth state
-                window.updateSwitchProfileLink = function() {
-                    const el = document.getElementById('switchProfileLink');
-                    if (!el) return;
-                    if (userId) {
-                        el.textContent = '🔐 Logout';
-                        el.classList.remove('danger');
-                    } else {
-                        el.textContent = '🔐 Switch Profile';
-                        el.classList.add('danger');
-                    }
-                };
-
-                // Register switch profile click handler (inside DOMContentLoaded so `ws` is available)
-                (function() {
-                    const link = document.getElementById('switchProfileLink');
-                    if (!link) return;
-                    link.addEventListener('click', async (event) => {
-                        event.preventDefault();
-                        const menuLinks = document.getElementById('menuLinks');
-                        if (menuLinks) menuLinks.classList.remove('open');
-
-                        if (userId) {
-                            if (!confirm('Log out of this profile?')) return;
-                            try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch (e) { /* ignore */ }
-                            clearAuth();
-                            await openAuthModal();
-                            return;
-                        }
-
-                        await openAuthModal();
-                    });
-                })();
+                setMode(mode);
             });
+        }
+
+        const switchProfileLink = document.getElementById('switchProfileLink');
+        if (switchProfileLink) {
+            switchProfileLink.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const menuLinks = document.getElementById('menuLinks');
+                if (menuLinks) menuLinks.classList.remove('open');
+
+                // If already logged in, treat as logout action
+                if (userId) {
+                    const doLogout = confirm('Log out of this profile?');
+                    if (!doLogout) return;
+                    // Close websocket if open
+                    try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch (e) { /* ignore */ }
+                    clearAuth();
+                    // Optionally open auth modal to allow quick re-login/switch
+                    await openAuthModal();
+                    return;
+                }
+
+                // Not logged in -> open login/register modal
+                await openAuthModal();
+            });
+        }
+
+        // Update the switch profile link label based on auth state
+        window.updateSwitchProfileLink = function () {
+            const el = document.getElementById('switchProfileLink');
+            if (!el) return;
+            if (userId) {
+                el.textContent = '🔐 Logout';
+                el.classList.remove('danger');
+            } else {
+                el.textContent = '🔐 Switch Profile';
+                el.classList.add('danger');
+            }
+        };
+
+        // Register switch profile click handler (inside DOMContentLoaded so `ws` is available)
+        (function () {
+            const link = document.getElementById('switchProfileLink');
+            if (!link) return;
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const menuLinks = document.getElementById('menuLinks');
+                if (menuLinks) menuLinks.classList.remove('open');
+
+                if (userId) {
+                    if (!confirm('Log out of this profile?')) return;
+                    try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch (e) { /* ignore */ }
+                    clearAuth();
+                    await openAuthModal();
+                    return;
+                }
+
+                await openAuthModal();
+            });
+        })();
 
     </script>
 
 </body>
+
 </html>

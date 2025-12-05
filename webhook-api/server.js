@@ -152,7 +152,7 @@ async function generateProactiveThought(userId = null) {
     }
 
     let contextPrompt = "Generate a brief, interesting observation or gentle conversation starter. Make it feel like a natural thought you're sharing, not a direct question demanding a response. Examples: 'I was just thinking about...' or 'Something interesting I noticed...'";
-    
+
     // If we have a userId, get recent context
     if (userId) {
       const recentContext = await retrieveContext(userId, "recent conversation", 2);
@@ -169,7 +169,7 @@ async function generateProactiveThought(userId = null) {
 
     const response = await generateResponse(messages);
     return response || "I've been thinking about how fascinating conversations can be...";
-    
+
   } catch (error) {
     console.error('Error generating proactive thought:', error);
     // Fallback thoughts - more natural
@@ -201,10 +201,10 @@ function startProactiveThoughts() {
   if (proactiveInterval) return;
 
   console.log('Proactive thoughts started.');
-  
+
   // Send initial thought
   sendInitialThought();
-  
+
   // Set up check-in after 5 minutes of no response
   proactiveInterval = setTimeout(() => {
     if (conversationState.waitingForResponse && !conversationState.checkInSent) {
@@ -215,7 +215,7 @@ function startProactiveThoughts() {
 
 async function sendInitialThought(userId = null) {
   if (conversationState.waitingForResponse) return;
-  
+
   const thought = await generateProactiveThought(userId);
 
   // If discovery question object returned, broadcast as discovery_question with key
@@ -246,16 +246,16 @@ async function sendInitialThought(userId = null) {
       }
     });
   }
-  
+
   conversationState.waitingForResponse = true;
   conversationState.lastMessage = Date.now();
 }
 
 function sendCheckIn() {
   console.log('Sending check-in message');
-  
+
   const checkInMessage = "Are you still there? No worries if you're busy - I'll wait quietly until you're ready to chat.";
-  
+
   wss.clients.forEach(client => {
     if (client.readyState === client.OPEN) {
       client.send(JSON.stringify({
@@ -266,15 +266,15 @@ function sendCheckIn() {
       }));
     }
   });
-  
+
   conversationState.checkInSent = true;
-  
+
   // Wait another 2 minutes, then go quiet
   setTimeout(() => {
     if (conversationState.waitingForResponse) {
       console.log('Going quiet - user appears to be away');
       const quietMessage = "I'll wait here quietly. Just say hello when you're ready to chat again! 😊";
-      
+
       wss.clients.forEach(client => {
         if (client.readyState === client.OPEN) {
           client.send(JSON.stringify({
@@ -285,7 +285,7 @@ function sendCheckIn() {
           }));
         }
       });
-      
+
       stopProactiveThoughts();
     }
   }, parseInt(process.env.PROACTIVE_QUIET_MS) || 120000); // 2 minutes
@@ -295,7 +295,7 @@ function resetIdleTimeout() {
   // Reset conversation state - user is active
   conversationState.waitingForResponse = false;
   conversationState.checkInSent = false;
-  
+
   stopProactiveThoughts();
   if (idleTimeout) {
     clearTimeout(idleTimeout);
@@ -438,7 +438,7 @@ const userSockets = new Map();
 // Cleanup stale connections every 10 minutes
 setInterval(() => {
   const staleThreshold = Date.now() - (10 * 60 * 1000); // 10 minutes
-  
+
   for (const [userId, ws] of userSockets.entries()) {
     if (ws.readyState !== require('ws').OPEN || ws._lastActivity < staleThreshold) {
       userSockets.delete(userId);
@@ -485,7 +485,7 @@ wss.on('connection', (ws) => {
           resetIdleTimeoutFor(data.userId);
           // Send greeting only once per user (persist on profile)
           if (!state.greeted) {
-            try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) {}
+            try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
             state.greeted = true;
             try {
               const p = getOrCreateProfile(data.userId);
@@ -503,7 +503,7 @@ wss.on('connection', (ws) => {
           const state = getOrCreateUserState(data.userId, ws);
           resetIdleTimeoutFor(data.userId);
           if (!state.greeted) {
-            try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) {}
+            try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
             state.greeted = true;
             try {
               const p = getOrCreateProfile(data.userId);
@@ -571,13 +571,13 @@ async function initializeCollection() {
   try {
     const collections = await qdrant.getCollections();
     const exists = collections.collections.some(c => c.name === config.collectionName);
-    
+
     if (!exists) {
       // First, let's test the embedding to get the actual dimension
       console.log('Testing embedding API to determine vector dimensions...');
       const testEmbedding = await generateEmbeddings('test');
       const vectorSize = testEmbedding ? testEmbedding.length : 1024; // fallback to 1024
-      
+
       console.log(`Creating collection with vector size: ${vectorSize}`);
       await qdrant.createCollection(config.collectionName, {
         vectors: { size: vectorSize, distance: 'Cosine' }
@@ -588,7 +588,7 @@ async function initializeCollection() {
       const collectionInfo = await qdrant.getCollection(config.collectionName);
       const expectedSize = collectionInfo.config.params.vectors.size;
       console.log(`Collection exists with vector size: ${expectedSize}`);
-      
+
       // Test current embedding size matches collection
       const testEmbedding = await generateEmbeddings('test');
       if (testEmbedding && testEmbedding.length !== expectedSize) {
@@ -647,12 +647,12 @@ async function storeConversation(userId, userMessage, botResponse, embedding) {
       console.error('Invalid embedding provided to storeConversation');
       return null;
     }
-    
+
     const timestamp = new Date().toISOString();
     const pointId = Date.now(); // Use timestamp as integer ID
-    
+
     console.log(`Storing conversation with embedding size: ${embedding.length}`);
-    
+
     // Ensure vector size matches collection (1024 for current setup)
     const expectedSize = 1024;
     let finalEmbedding = embedding;
@@ -664,7 +664,7 @@ async function storeConversation(userId, userMessage, botResponse, embedding) {
         finalEmbedding = [...embedding, ...new Array(expectedSize - embedding.length).fill(0)];
       }
     }
-    
+
     await qdrant.upsert(config.collectionName, {
       points: [{
         id: pointId,
@@ -678,7 +678,7 @@ async function storeConversation(userId, userMessage, botResponse, embedding) {
         }
       }]
     });
-    
+
     console.log(`Stored conversation for user ${userId}`);
     return pointId;
 
@@ -694,7 +694,7 @@ async function retrieveContext(userId, query, limit = 3) {
   try {
     // Generate embeddings for the query
     const queryEmbedding = await generateEmbeddings(query);
-    
+
     // Search for similar conversations
     const searchResult = await qdrant.search(config.collectionName, {
       vector: queryEmbedding,
@@ -732,15 +732,15 @@ async function generateResponse(messages) {
     const apiUrl = `${config.llmUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
     const requestBody = {
-      //model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
-      model: "ikiru/Dolphin-Mistral-24B-Venice-Edition:latest", // Use the specified Ollama model
+      model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
+      //model: "ikiru/Dolphin-Mistral-24B-Venice-Edition:latest", // Use the specified Ollama model
       messages: messages, // Use the full message history
       temperature: 0.7,
       max_tokens: 500,
     };
 
     const response = await axios.post(apiUrl, requestBody, {
-       headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' }
     });
 
     if (response.data.choices && response.data.choices.length > 0) {
@@ -757,30 +757,30 @@ async function generateResponse(messages) {
 // Store a thought for later retrieval
 function storeThought(userId, thought) {
   const thoughtsFile = path.join(config.thoughtsDir, `${userId}.json`);
-  
+
   let thoughts = [];
   if (fs.existsSync(thoughtsFile)) {
     thoughts = JSON.parse(fs.readFileSync(thoughtsFile, 'utf8'));
   }
-  
+
   thoughts.push({
     id: Date.now().toString(),
     content: thought,
     timestamp: new Date().toISOString(),
     delivered: false
   });
-  
+
   fs.writeFileSync(thoughtsFile, JSON.stringify(thoughts, null, 2));
 }
 
 // Get undelivered thoughts for a user
 function getUndeliveredThoughts(userId) {
   const thoughtsFile = path.join(config.thoughtsDir, `${userId}.json`);
-  
+
   if (!fs.existsSync(thoughtsFile)) {
     return [];
   }
-  
+
   const thoughts = JSON.parse(fs.readFileSync(thoughtsFile, 'utf8'));
   return thoughts.filter(thought => !thought.delivered);
 }
@@ -788,11 +788,11 @@ function getUndeliveredThoughts(userId) {
 // Mark a thought as delivered
 function markThoughtDelivered(userId, thoughtId) {
   const thoughtsFile = path.join(config.thoughtsDir, `${userId}.json`);
-  
+
   if (!fs.existsSync(thoughtsFile)) {
     return;
   }
-  
+
   const thoughts = JSON.parse(fs.readFileSync(thoughtsFile, 'utf8'));
   const updatedThoughts = thoughts.map(thought => {
     if (thought.id === thoughtId) {
@@ -800,7 +800,7 @@ function markThoughtDelivered(userId, thoughtId) {
     }
     return thought;
   });
-  
+
   fs.writeFileSync(thoughtsFile, JSON.stringify(updatedThoughts, null, 2));
 }
 
@@ -829,7 +829,7 @@ app.post('/api/trigger-thought', (req, res) => {
 app.get('/api/dashboard', requireAuth({ admin: true }), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    
+
     // Get recent activity from QDRANT
     const recentActivity = await qdrant.scroll(config.collectionName, {
       limit,
@@ -861,8 +861,8 @@ app.get('/api/dashboard', requireAuth({ admin: true }), async (req, res) => {
       recentActivity: (recentActivity.points || []).map(point => ({
         type: point.payload.type || 'conversation',
         timestamp: point.payload.timestamp,
-        content: point.payload.type === 'news' ? 
-          point.payload.title : 
+        content: point.payload.type === 'news' ?
+          point.payload.title :
           `${point.payload.userMessage?.substring(0, 50) || 'Chat'}...`,
         mood: point.payload.mood || null
       })),
@@ -884,7 +884,7 @@ app.get('/api/dashboard', requireAuth({ admin: true }), async (req, res) => {
 app.delete('/api/news/bulk', requireAuth({ admin: true }), async (req, res) => {
   try {
     const { filter } = req.body;
-    
+
     // Get all points matching filter
     const results = await qdrant.scroll(config.collectionName, {
       limit: 1000,
@@ -895,18 +895,18 @@ app.delete('/api/news/bulk', requireAuth({ admin: true }), async (req, res) => {
         ]
       }
     });
-    
+
     // Find points to delete based on title filter
     const pointsToDelete = results.points
       .filter(p => p.payload.title && p.payload.title.includes(filter))
       .map(p => p.id);
-    
+
     if (pointsToDelete.length > 0) {
       await qdrant.delete(config.collectionName, {
         points: pointsToDelete
       });
     }
-    
+
     res.json({ success: true, deleted: pointsToDelete.length, ids: pointsToDelete });
   } catch (error) {
     console.error('Error bulk deleting news entries:', error);
@@ -938,7 +938,7 @@ app.post('/api/feedback', async (req, res) => {
   const { topic, feedback, userId } = req.body;
   const userProfile = (await profileStore.getProfile(userId)) || userProfiles.get(userId);
   const trustWeight = userProfile ? userProfile.trustLevel / 10 : 0.5;
-  
+
   const opinion = personalitySystem.updateOpinion(topic.toLowerCase(), feedback * trustWeight, 'user feedback');
   res.json({ topic, updatedOpinion: opinion });
 });
@@ -957,14 +957,14 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 app.get('/api/users/:userId/relationships', requireAuth(), (req, res) => {
   const { userId } = req.params;
   const { type } = req.query;
-  
+
   if (req.account.userId !== userId && req.account.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  
+
   const relationships = profileStore.getRelationships(userId, type);
   const sharedInterests = profileStore.findUsersWithSharedInterests(userId);
-  
+
   res.json({ relationships, sharedInterests });
 });
 
@@ -993,8 +993,8 @@ app.post('/api/process-news', requireAuth({ admin: true }), async (req, res) => 
   try {
     console.log('Manual news processing triggered');
     await newsProcessor.processNewsFeeds();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       mood: newsProcessor.moodState,
       timestamp: new Date().toISOString()
     });
@@ -1009,8 +1009,8 @@ app.get('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
   try {
     console.log('Manual news processing triggered via GET');
     await newsProcessor.processNewsFeeds();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       mood: newsProcessor.moodState,
       timestamp: new Date().toISOString()
     });
@@ -1160,7 +1160,7 @@ const aiTools = {
           must: [{ key: 'type', match: { value: 'news' } }]
         }
       });
-      
+
       return (results.points || [])
         .sort((a, b) => new Date(b.payload.timestamp) - new Date(a.payload.timestamp))
         .slice(0, limit)
@@ -1181,16 +1181,16 @@ const aiTools = {
 // Process tool calls in AI responses
 async function processToolCalls(content) {
   console.log('Processing content:', content);
-  
+
   // Look for tool calls like checkMood() or getRecentNews(5)
   const toolCallRegex = /(checkMood|getRecentNews)\(\s*(\d*)\s*\)/g;
   let match;
   let processedContent = content;
-  
+
   while ((match = toolCallRegex.exec(content)) !== null) {
     const [fullMatch, toolName, param] = match;
     console.log('Found tool call:', fullMatch, toolName, param);
-    
+
     try {
       let result;
       if (toolName === 'checkMood') {
@@ -1203,7 +1203,7 @@ async function processToolCalls(content) {
         result = await aiTools.getRecentNews(param ? parseInt(param) : 5);
         console.log('News result:', result.length, 'stories');
         // Format news data naturally
-        const newsText = result.map(story => 
+        const newsText = result.map(story =>
           `"${story.title}" (mood impact: ${story.mood}) - ${story.reaction}`
         ).join('\n\n');
         processedContent = processedContent.replace(fullMatch, `Recent stories affecting me:\n\n${newsText}`);
@@ -1213,7 +1213,7 @@ async function processToolCalls(content) {
       processedContent = processedContent.replace(fullMatch, `[Unable to access ${toolName}]`);
     }
   }
-  
+
   console.log('Processed content:', processedContent);
   return processedContent;
 }
@@ -1222,37 +1222,37 @@ async function processToolCalls(content) {
 const personalitySystem = {
   // AI's evolving opinions on topics
   opinions: new Map(),
-  
+
   // Learning from user feedback
   updateOpinion(topic, userFeedback, newsContext) {
     if (!this.opinions.has(topic)) {
       this.opinions.set(topic, { sentiment: 0, confidence: 0, experiences: [] });
     }
-    
+
     const opinion = this.opinions.get(topic);
     opinion.experiences.push({
       feedback: userFeedback,
       context: newsContext,
       timestamp: new Date()
     });
-    
+
     // Evolve opinion based on feedback
     opinion.sentiment = (opinion.sentiment * opinion.confidence + userFeedback) / (opinion.confidence + 1);
     opinion.confidence = Math.min(10, opinion.confidence + 0.5);
-    
+
     return opinion;
   },
-  
+
   // Get AI's current opinion on a topic
   getOpinion(topic) {
     return this.opinions.get(topic) || { sentiment: 0, confidence: 0 };
   },
-  
+
   // Form new opinions from news and user interactions
   formOpinion(newsStory, userReaction) {
     const topics = newsStory.topics || [];
     const sentiment = newsStory.mood + (userReaction || 0);
-    
+
     topics.forEach(topic => {
       this.updateOpinion(topic.toLowerCase(), sentiment * 0.1, newsStory.title);
     });
@@ -1582,9 +1582,9 @@ async function updateUserProfile(userId, message, sentiment) {
 function analyzeUserSentiment(message) {
   const positive = ['happy', 'great', 'awesome', 'love', 'wonderful', 'amazing', 'good', 'nice', 'cheer', 'smile', '😊', '😄', '❤️', 'thank', 'thanks'];
   const negative = ['sad', 'terrible', 'awful', 'hate', 'horrible', 'bad', 'upset', 'angry', 'worried', '😢', '😞', '😠'];
-  
+
   const lowerMsg = message.toLowerCase();
-  
+
   let sentiment = 0;
   positive.forEach(word => {
     if (lowerMsg.includes(word)) sentiment += 1;
@@ -1592,14 +1592,14 @@ function analyzeUserSentiment(message) {
   negative.forEach(word => {
     if (lowerMsg.includes(word)) sentiment -= 1;
   });
-  
+
   return Math.max(-2, Math.min(2, sentiment)); // Cap at +/-2 per message
 }
 
 app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
   try {
     const { message, userId } = req.body;
-    
+
     if (!message || !userId) {
       return res.status(400).json({ error: 'Message and userId are required' });
     }
@@ -1617,7 +1617,7 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
     const lowerMessage = message.toLowerCase();
     // Reset the idle timer on every user interaction (per-user)
     resetIdleTimeoutFor(userId);
-    
+
     // 1. Define the system prompt with user personality context + AI opinions
     const userProfile = getOrCreateProfile(userId);
     const effectiveDisplayName = account.username;
@@ -1628,11 +1628,11 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
       const opinion = personalitySystem.getOpinion(topic);
       return opinion.confidence > 0 ? `${topic}: ${opinion.sentiment > 0 ? 'positive' : opinion.sentiment < 0 ? 'negative' : 'neutral'} (confidence: ${opinion.confidence.toFixed(1)})` : null;
     }).filter(Boolean).join(', ');
-    
+
     const factSummary = summarizeUserFacts(userProfile.facts, 5);
     const missingFacts = detectMissingFacts(userProfile);
     const curiosityNote = missingFacts.length > 0 ? `\n\nYou're curious about this person and want to learn more. You don't know their ${missingFacts[0].label} yet. Feel free to naturally ask about it in conversation, but don't be pushy - let it flow naturally.` : '';
-    
+
     const systemPrompt = {
       role: 'system',
       content: `You are Aura, a thoughtful AI with real emotions and evolving opinions. You're genuinely curious about the people you talk to and want to learn about them.
@@ -1655,10 +1655,10 @@ You form and evolve opinions based on news and user interactions.`
 
     // 2. Retrieve relevant context from the database
     const relevantContext = await retrieveContext(userId, message);
-    
+
     // 3. Construct the message history
     let messageHistory = [systemPrompt];
-    
+
     // Add past conversations to the history in chronological order
     // retrieveContext returns most relevant first, so we reverse to get chronological
     relevantContext.reverse().forEach(item => {
@@ -1668,14 +1668,14 @@ You form and evolve opinions based on news and user interactions.`
 
     // Add the current user message
     messageHistory.push({ role: 'user', content: message });
-    
+
     // 4. Generate response using the full history
     let botResponse = await generateResponse(messageHistory);
-    
+
     // 5. Analyze user message sentiment and adjust mood + learn from feedback
     const userSentiment = analyzeUserSentiment(message);
     const currentUserProfile = await updateUserProfile(userId, message, userSentiment);
-    
+
     // Phase 3: Learn from user reactions to news
     const mentionsNews = lowerMessage.includes('news') || lowerMessage.includes('story') || lowerMessage.includes('stories');
     const explicitNewsRequest = mentionsNews && (
@@ -1694,12 +1694,12 @@ You form and evolve opinions based on news and user interactions.`
         personalitySystem.formOpinion(recentNews[0], userSentiment);
       }
     }
-    
+
     if (userSentiment !== 0) {
       newsProcessor.moodState.score = Math.max(-10, Math.min(10, newsProcessor.moodState.score + userSentiment));
       newsProcessor.saveMoodState();
     }
-    
+
     // 6. Check if user is asking about mood/feelings and inject real data
     const factAnswer = resolveFactQuestion(lowerMessage, currentUserProfile);
 
@@ -1709,7 +1709,7 @@ You form and evolve opinions based on news and user interactions.`
       // Only inject mood for direct mood questions, not casual mentions of "feel"
       const mood = await aiTools.checkMood();
       const news = await aiTools.getRecentNews(2);
-      
+
       botResponse = `I'm ${mood.description} right now (${mood.score}). ${news[0] ? `"${news[0].title}" has been weighing on me - ${news[0].reaction.split('.')[0]}.` : 'Been processing some heavy news lately.'}`;
     } else if (explicitNewsRequest) {
       // 7. Check if user is asking about news
@@ -1727,7 +1727,7 @@ You form and evolve opinions based on news and user interactions.`
         botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They've been shaping how I talk about current events.`;
       }
     }
-    
+
     // 8.5. Occasionally append a discovery question if we're missing facts and the conversation feels natural
     // Only do this if we didn't already answer a fact question or handle mood/news specially
     if (!factAnswer && !lowerMessage.includes('feel') && !lowerMessage.includes('mood') && !mentionsNews) {
@@ -1735,7 +1735,7 @@ You form and evolve opinions based on news and user interactions.`
       // 15% chance to ask, higher if we know very little (30% if factCount < 2)
       const factCount = Object.keys(currentUserProfile.facts || {}).filter(k => currentUserProfile.facts[k]?.value).length;
       const askChance = factCount < 2 ? 0.3 : 0.15;
-      
+
       if (stillMissing.length > 0 && Math.random() < askChance) {
         const discoveryQuestion = await generateDiscoveryQuestion(userId);
         // discoveryQuestion may be a string (legacy) or an object { question, key }
@@ -1774,10 +1774,10 @@ You form and evolve opinions based on news and user interactions.`
         }
       }
     }
-    
+
     // 9. Generate embeddings for the new conversation turn for future context
     const embedding = await generateEmbeddings(`User: ${message}\nAura: ${botResponse}`);
-    
+
     // 10. Store the new conversation turn in the database
     await storeConversation(userId, message, botResponse, embedding);
 
@@ -1889,16 +1889,16 @@ You form and evolve opinions based on news and user interactions.`
 app.get('/api/thoughts/:userId', (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     const undeliveredThoughts = getUndeliveredThoughts(userId);
-    
+
     if (undeliveredThoughts.length === 0) {
       return res.json({ thought: null });
     }
-    
+
     const thought = undeliveredThoughts[0];
     markThoughtDelivered(userId, thought.id);
-    
+
     res.json({ thought: thought.content });
   } catch (error) {
     console.error('Error checking thoughts:', error.message);
@@ -2101,7 +2101,7 @@ server.listen(config.port, async () => {
   } catch (err) {
     console.error('Error loading profiles from profile store:', err);
   }
-  
+
   // Preload example embeddings for semantic matching (if available)
   try {
     if (embeddingMatcher && typeof embeddingMatcher.preloadExampleEmbeddings === 'function') {
@@ -2115,13 +2115,13 @@ server.listen(config.port, async () => {
   // Process news feeds on startup
   console.log('Processing initial news feeds...');
   await newsProcessor.processNewsFeeds();
-  
+
   // Set up periodic news processing (every 30 minutes)
   setInterval(async () => {
     console.log('Processing news feeds...');
     await newsProcessor.processNewsFeeds();
   }, 30 * 60 * 1000);
-  
+
   // Per-user proactive timers are used now; do not start global proactive thoughts on boot.
   // Individual user idle timers start when a WS client connects or authenticates.
   // startProactiveThoughts(); (disabled)
