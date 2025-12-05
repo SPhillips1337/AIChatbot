@@ -37,7 +37,7 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 
 - **PHP Frontend Server**: An Apache server running in Docker to serve the `index.html` file.
 - **Node.js Backend**: The core of the application, handling chat logic, memory, WebSocket communication, and news processing.
-- **QDRANT Vector Database**: Provides semantic search and context storage. The `docker-compose.yml` in this repo comments out the Qdrant service by default; configure `QDRANT_URL` to point to your instance if you run it remotely.
+- **QDRANT Vector Database**: Provides semantic search and context storage. Configure `QDRANT_URL` and `QDRANT_API_KEY` to point to your Qdrant cloud instance or local server.
 - **LLM & Embeddings**: Expects OpenAI-compatible endpoints (configure `LLM_URL` and `EMBEDDING_URL`). The server calls `v1/chat/completions` and `v1/embeddings` paths — compatible gateways include Ollama, OpenRouter, or other OpenAI-style APIs.
 
 ## Features
@@ -69,12 +69,13 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 - Docker and Docker Compose
 - A running OpenAI-compatible LLM endpoint (set `LLM_URL`)
 - An embeddings endpoint (set `EMBEDDING_URL`)
-- A QDRANT server reachable at the `QDRANT_URL` you configure (optional)
+- A QDRANT server - either local or cloud instance (set `QDRANT_URL` and `QDRANT_API_KEY`)
 
 ### Environment variables (notable)
 - `LLM_URL` - Base URL for LLM completion calls
 - `EMBEDDING_URL` - Base URL for embedding calls (required for embedding-backed matcher in production)
-- `QDRANT_URL` - Qdrant endpoint (optional)
+- `QDRANT_URL` - Qdrant endpoint (local: http://localhost:6333 or cloud: https://your-cluster.region.aws.cloud.qdrant.io)
+- `QDRANT_API_KEY` - API key for Qdrant cloud instances (not needed for local)
 - `PORT` - Server port
 - `DEV_MOCK` - If `true` returns canned embeddings/responses for local testing
 - Note: If you edit `webhook-api/fact_definitions.js`, restart the webhook-api server to refresh preloaded example embeddings.
@@ -93,17 +94,25 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
     cd webhook-api && npm install
     ```
 
-2.  **Configure Remote Services (production):**
-    Set `LLM_URL`, `EMBEDDING_URL`, and `QDRANT_URL` in `.env` or in your environment.
+2.  **Configure Environment:**
+    ```bash
+    # Copy example files and update with your values
+    cp .env.example .env
+    cp webhook-api/.env.example webhook-api/.env
+    # Edit .env files with your LLM, embedding, and Qdrant credentials
+    ```
 
-3.  **Start services:**
+3.  **Configure Remote Services:**
+    Set `LLM_URL`, `EMBEDDING_URL`, `QDRANT_URL`, and `QDRANT_API_KEY` in your `.env` files.
+
+4.  **Start services:**
     ```bash
     docker compose up -d --build webhook-api
     # or locally for development:
     PORT=4002 node webhook-api/server.js
     ```
 
-4.  **Open the chat UI:** `https://localhost/chat` (or `http://localhost:4002/chat`)
+5.  **Open the chat UI:** `https://localhost/chat` (or `http://localhost:4002/chat`)
 
 ## Production Features
 - **Rate Limiting**: 30 requests per minute per user on chat endpoint

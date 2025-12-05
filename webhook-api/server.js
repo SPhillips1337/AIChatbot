@@ -27,6 +27,7 @@ const config = {
   llmUrl: process.env.LLM_URL || 'http://localhost:8080',
   embeddingUrl: process.env.EMBEDDING_URL || 'http://localhost:8081',
   qdrantUrl: process.env.QDRANT_URL || 'http://192.168.1.2:6333',
+  qdrantApiKey: process.env.QDRANT_API_KEY,
   thoughtsDir: path.join(__dirname, 'thoughts'),
   collectionName: 'conversations',
   debug: true
@@ -42,7 +43,11 @@ if (!devMock && (!config.llmUrl.startsWith('http') || !config.embeddingUrl.start
 }
 
 // Initialize QDRANT client
-const qdrant = new QdrantClient({ url: config.qdrantUrl });
+const qdrantConfig = { url: config.qdrantUrl };
+if (config.qdrantApiKey) {
+  qdrantConfig.apiKey = config.qdrantApiKey;
+}
+const qdrant = new QdrantClient(qdrantConfig);
 
 // Initialize News Processor
 const newsProcessor = new NewsProcessor(qdrant, config);
@@ -578,6 +583,17 @@ async function initializeCollection() {
         vectors: { size: vectorSize, distance: 'Cosine' }
       });
       console.log(`Created collection: ${config.collectionName}`);
+    } else {
+      // Get existing collection info to validate vector size
+      const collectionInfo = await qdrant.getCollection(config.collectionName);
+      const expectedSize = collectionInfo.config.params.vectors.size;
+      console.log(`Collection exists with vector size: ${expectedSize}`);
+      
+      // Test current embedding size matches collection
+      const testEmbedding = await generateEmbeddings('test');
+      if (testEmbedding && testEmbedding.length !== expectedSize) {
+        console.warn(`WARNING: Embedding size mismatch! Collection expects ${expectedSize}, got ${testEmbedding.length}`);
+      }
     }
   } catch (error) {
     console.error('Error initializing collection:', error);
@@ -637,10 +653,22 @@ async function storeConversation(userId, userMessage, botResponse, embedding) {
     
     console.log(`Storing conversation with embedding size: ${embedding.length}`);
     
+    // Ensure vector size matches collection (1024 for current setup)
+    const expectedSize = 1024;
+    let finalEmbedding = embedding;
+    if (embedding.length !== expectedSize) {
+      console.warn(`Vector size mismatch: got ${embedding.length}, expected ${expectedSize}. Adjusting...`);
+      if (embedding.length > expectedSize) {
+        finalEmbedding = embedding.slice(0, expectedSize);
+      } else {
+        finalEmbedding = [...embedding, ...new Array(expectedSize - embedding.length).fill(0)];
+      }
+    }
+    
     await qdrant.upsert(config.collectionName, {
       points: [{
         id: pointId,
-        vector: embedding,
+        vector: finalEmbedding,
         payload: {
           userId,
           userMessage,
@@ -704,7 +732,8 @@ async function generateResponse(messages) {
     const apiUrl = `${config.llmUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
     const requestBody = {
-      model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
+      //model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
+      model: "ikiru/Dolphin-Mistral-24B-Venice-Edition:latest", // Use the specified Ollama model
       messages: messages, // Use the full message history
       temperature: 0.7,
       max_tokens: 500,

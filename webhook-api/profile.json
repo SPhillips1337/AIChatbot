@@ -1,33 +1,33 @@
 {
   "2351d788-4fb9-4dcf-88a1-56f63e06f649": {
-    "interactions": 61,
-    "avgSentiment": 0.09836065573770492,
+    "interactions": 166,
+    "avgSentiment": 0.19277108433734935,
     "topics": [
-      "projects",
-      "working",
-      "experiment",
+      "github",
+      "repository",
+      "there",
+      "backup",
+      "review",
+      "newer",
+      "tools",
+      "appeared",
+      "allowed",
       "ideas",
-      "wouldn't",
-      "ordinarily",
-      "around",
-      "with,",
-      "hoping",
-      "local",
-      "might",
-      "further",
-      "exponentially",
-      "increase",
-      "productivity",
-      "allowing",
-      "various",
-      "forget",
-      "about",
-      "later"
+      "projects",
+      "always",
+      "burner",
+      "having",
+      "something",
+      "things",
+      "never",
+      "boring",
+      "which",
+      "bored"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-25T10:07:36.132Z",
+    "lastSeen": "2025-12-04T17:59:47.041Z",
     "preferences": {},
-    "trustLevel": 5,
+    "trustLevel": 5.199999999999999,
     "facts": {
       "name": {
         "value": "info@happymonkey.ai",
@@ -47,33 +47,63 @@
         "value": "morning",
         "confidence": 0.95,
         "source": "user_confirmation",
-        "updatedAt": "2025-11-25T10:01:17.010Z"
+        "updatedAt": "2025-12-04T09:54:26.746Z"
+      },
+      "city": {
+        "value": "England in the United Kingdom so pretty much everything runs",
+        "confidence": 0.95,
+        "source": "user_confirmation",
+        "updatedAt": "2025-12-02T13:14:12.274Z"
       }
     },
     "displayName": "info@happymonkey.ai",
-    "updated_at": "2025-11-25T10:07:36.132Z",
+    "updated_at": "2025-12-04T17:59:47.042Z",
     "askedQuestions": [
+      {
+        "key": "city",
+        "question": "Where are you based (city or town)?",
+        "askedAt": "2025-11-24T12:43:27.639Z",
+        "confirmed": true,
+        "confirmedAt": "2025-12-02T13:14:12.274Z",
+        "confirmedValue": "England in the United Kingdom so pretty much everything runs"
+      },
+      {
+        "key": "favorite_music",
+        "question": "Do you have a favorite music artist or genre?",
+        "askedAt": "2025-11-28T15:11:07.712Z"
+      },
+      {
+        "key": "favorite_food",
+        "question": "What's your favorite food or dish?",
+        "askedAt": "2025-11-28T16:59:04.145Z"
+      },
+      {
+        "key": "communication_style",
+        "question": "Would you like shorter answers or longer, more detailed ones?",
+        "askedAt": "2025-11-28T17:09:07.366Z"
+      },
+      {
+        "key": "birthday",
+        "question": "Would you like me to remember your birthday? (optional)",
+        "askedAt": "2025-11-28T17:11:34.626Z"
+      },
       {
         "key": "pronouns",
         "question": "Which pronouns do you prefer (e.g., he/him, she/her, they/them)?",
-        "askedAt": "2025-11-24T12:23:22.397Z"
+        "askedAt": "2025-12-02T12:15:35.894Z"
       },
       {
         "key": "timezone",
         "question": "Which timezone should I use when thinking about your day?",
-        "askedAt": "2025-11-24T12:41:21.661Z"
-      },
-      {
-        "key": "city",
-        "question": "Where are you based (city or town)?",
-        "askedAt": "2025-11-24T12:43:27.639Z"
+        "askedAt": "2025-12-02T13:05:45.617Z"
       },
       {
         "key": "occupation",
         "question": "What's your occupation or main focus these days?",
-        "askedAt": "2025-11-24T13:50:05.373Z"
+        "askedAt": "2025-12-02T13:15:22.609Z"
       }
-    ]
+    ],
+    "greeted": true
   },
   "cbe7901d-0bda-475d-85b8-d5d1efa79944": {
     "interactions": 8,
@@ -116,20 +146,32 @@
     "updated_at": "2025-11-20T17:29:07.904Z"
   },
   "17d09f9f-4525-4e99-9f7a-b6454374b982": {
-    "interactions": 4,
-    "avgSentiment": 0.25,
+    "interactions": 19,
+    "avgSentiment": 0.10526315789473684,
     "topics": [
-      "names",
       "borat,",
-      "goats?",
-      "you..",
-      "alive?",
-      "aura.",
-      "borat",
-      "kazakhstan"
+      "kazakhstan.",
+      "joking",
+      "names",
+      "jingles,",
+      "although",
+      "people",
+      "santa.",
+      "north",
+      "deliver",
+      "presents",
+      "kids,",
+      "their",
+      "parents",
+      "under",
+      "tree.",
+      "glory",
+      "software",
+      "stack",
+      "about"
     ],
     "personality": "neutral",
-    "lastSeen": "2025-11-20T18:21:32.305Z",
+    "lastSeen": "2025-12-04T18:00:08.481Z",
     "preferences": {},
     "trustLevel": 5,
     "facts": {
@@ -139,9 +181,88 @@
         "confidence": 0.99,
         "source": "user_display_name",
         "updatedAt": "2025-11-20T18:15:40.146Z"
+      },
+      "city": {
+        "value": "the North Pole",
+        "label": "city",
+        "confidence": 0.8,
+        "source": "I am from the North Pole",
+        "updatedAt": "2025-12-04T17:55:58.710Z"
       }
     },
     "displayName": "Borat",
-    "updated_at": "2025-11-20T18:21:32.305Z"
+    "updated_at": "2025-12-04T18:00:08.481Z",
+    "greeted": true,
+    "askedQuestions": [
+      {
+        "key": "pronouns",
+        "question": "Do you have preferred pronouns I should use for you?",
+        "askedAt": "2025-12-04T17:50:04.717Z"
+      },
+      {
+        "key": "timezone",
+        "question": "Which timezone should I use when thinking about your day?",
+        "askedAt": "2025-12-04T17:59:04.518Z"
+      }
+    ]
+  },
+  "1c917ff8-5dcd-47ea-b9d6-f2b1038da2f0": {
+    "interactions": 12,
+    "avgSentiment": 0.4166666666666667,
+    "topics": [
+      "guess",
+      "name!",
+      "technology",
+      "emotions,",
+      "frustrating.",
+      "especially",
+      "iterate",
+      "sorry!",
+      "heard",
+      "links",
+      "current",
+      "events?",
+      "specific?",
+      "provide",
+      "gosh...is",
+      "there",
+      "happy?",
+      "might",
+      "goodbye",
+      "thanks,"
+    ],
+    "personality": "neutral",
+    "lastSeen": "2025-12-04T16:35:18.766Z",
+    "preferences": {},
+    "trustLevel": 5.1,
+    "facts": {
+      "name": {
+        "value": "trisscsutka",
+        "label": "name",
+        "confidence": 0.99,
+        "source": "user_display_name",
+        "updatedAt": "2025-12-04T16:15:53.263Z"
+      }
+    },
+    "greeted": true,
+    "updated_at": "2025-12-04T16:45:31.636Z",
+    "displayName": "trisscsutka",
+    "askedQuestions": [
+      {
+        "key": "pronouns",
+        "question": "Do you have preferred pronouns I should use for you?",
+        "askedAt": "2025-12-04T16:19:45.771Z"
+      },
+      {
+        "key": "timezone",
+        "question": "What timezone are you in, or which city are you in so I can get the time right?",
+        "askedAt": "2025-12-04T16:21:30.075Z"
+      },
+      {
+        "key": "city",
+        "question": "Where are you based (city or town)?",
+        "askedAt": "2025-12-04T16:45:31.636Z"
+      }
+    ]
   }
 }
