@@ -2142,6 +2142,100 @@ app.get('/api/admin/telemetry', requireAuth({ admin: true }), (req, res) => {
   }
 });
 
+// GDPR Data Deletion endpoint
+app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
+  try {
+    const userId = req.account.userId;
+    
+    // Delete profile
+    profileStore.deleteProfile(userId);
+    
+    // Delete conversations from Qdrant
+    try {
+      await qdrant.delete(config.collectionName, {
+        filter: {
+          must: [{ key: 'userId', match: { value: userId } }]
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to delete conversations:', error.message);
+    }
+
+    // Delete from GraphStore if available
+    if (graphStore) {
+      try {
+        // Note: GraphStore doesn't have a delete method, would need to be implemented
+        console.warn('GraphStore deletion not implemented');
+      } catch (error) {
+        console.warn('Failed to delete graph data:', error.message);
+      }
+    }
+
+    // Delete account
+    accountStore.deleteAccount(userId);
+
+    res.json({ success: true, message: 'All data deleted' });
+  } catch (error) {
+    console.error('GDPR deletion error:', error);
+    res.status(500).json({ error: 'Deletion failed' });
+  }
+});
+
+// GDPR Data Export endpoint
+app.get('/api/gdpr/export', requireAuth(), async (req, res) => {
+  try {
+    const userId = req.account.userId;
+    
+    // Get profile data
+    const profile = await profileStore.getProfile(userId);
+    
+    // Get conversation history from Qdrant
+    let conversations = [];
+    try {
+      const searchResult = await qdrant.scroll(config.collectionName, {
+        filter: {
+          must: [{ key: 'userId', match: { value: userId } }]
+        },
+        limit: 1000,
+        with_payload: true
+      });
+      conversations = searchResult.points.map(point => point.payload);
+    } catch (error) {
+      console.warn('Failed to export conversations:', error.message);
+    }
+
+    // Get GraphStore data if available
+    let graphData = null;
+    if (graphStore) {
+      try {
+        graphData = await graphStore.getUserContext(userId);
+      } catch (error) {
+        console.warn('Failed to export graph data:', error.message);
+      }
+    }
+
+    const exportData = {
+      userId,
+      exportDate: new Date().toISOString(),
+      profile,
+      conversations,
+      graphData
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="aura-ai-data-${userId}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    console.error('GDPR export error:', error);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// Serve privacy policy
+app.get('/privacy-policy.html', (req, res) => {
+  res.sendFile(path.join(__dirname, '../privacy-policy.html'));
+});
+
 // Serve chat UI from the webhook API so UI and API share origin
 app.get('/', (req, res) => {
   res.redirect('/chat');

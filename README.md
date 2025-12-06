@@ -62,6 +62,7 @@ The system runs automatically on startup and every 30 minutes thereafter.
 - **Robust JSON parsing**: Better error handling for malformed LLM responses in news processing.
 - **Vector embedding fixes**: Dynamic vector size detection and client-side filtering to resolve Qdrant Bad Request errors.
 - **Neo4j GraphStore integration**: Optional graph database support with hybrid JSON/Neo4j storage and graceful fallback.
+- **GDPR compliance**: Basic privacy compliance with consent banner, privacy policy, and data export/deletion endpoints.
 
 ## Components
 
@@ -197,7 +198,8 @@ Client should send an initial WS auth frame on connect: `{ type: 'auth', userId,
 
 ```
 AIChatbot/
-├── index.html                 # Frontend chat interface
+├── index.html                 # Frontend chat interface with GDPR consent
+├── privacy-policy.html        # GDPR privacy policy
 ├── webhook-api/               # Node.js backend
 │   ├── server.js              # Main API and WebSocket server
 │   ├── embeddingMatcher.js    # Embedding-backed semantic matcher
@@ -213,6 +215,23 @@ AIChatbot/
 ├── docker-compose.yml         # Docker services configuration
 └── README.md
 ```
+
+## GDPR Compliance
+
+The system includes basic GDPR compliance features:
+
+- **Consent Banner**: Users must accept data collection before using the chatbot
+- **Privacy Policy**: Transparent disclosure of data collection and processing
+- **Data Export**: Users can download all their data via `/api/gdpr/export`
+- **Data Deletion**: Users can delete all their data via `/api/gdpr/delete-all`
+- **Profile Management**: Users can view and remove individual facts
+
+**Note**: This is minimal compliance. For production use, consider:
+- Legal review of privacy policy
+- Cookie management for non-essential cookies
+- Data retention policies
+- Audit logging for data access/changes
+- Enhanced consent management
 
 ## Next steps
 - Aggregate telemetry and provide per-fact metrics

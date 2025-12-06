@@ -480,6 +480,15 @@
 </head>
 
 <body>
+    <!-- GDPR Consent Banner -->
+    <div id="gdpr-banner" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: white; padding: 15px; z-index: 10000; text-align: center;">
+        <p style="margin: 0 0 10px 0;">
+            🍪 This AI chatbot collects and stores conversation data, personal facts, and behavioral patterns to provide personalized responses. 
+            <a href="/privacy-policy.html" target="_blank" style="color: #ffc107;">Privacy Policy</a>
+        </p>
+        <button onclick="acceptGDPR()" style="background: #28a745; color: white; border: none; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px;">Accept & Continue</button>
+        <button onclick="declineGDPR()" style="background: #dc3545; color: white; border: none; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px;">Decline</button>
+    </div>
 
     <div class="menu-bar">
         <div class="brand">
@@ -560,6 +569,29 @@
         let authToken = null;
         let ws = null;
 
+        // GDPR Consent Management
+        function checkGDPRConsent() {
+            const consent = localStorage.getItem('gdpr-consent');
+            if (!consent) {
+                document.getElementById('gdpr-banner').style.display = 'block';
+                return false;
+            }
+            return consent === 'accepted';
+        }
+
+        function acceptGDPR() {
+            localStorage.setItem('gdpr-consent', 'accepted');
+            document.getElementById('gdpr-banner').style.display = 'none';
+            // Trigger the main app initialization that was blocked
+            initializeChatApp();
+        }
+
+        function declineGDPR() {
+            localStorage.setItem('gdpr-consent', 'declined');
+            document.getElementById('gdpr-banner').style.display = 'none';
+            document.getElementById('chat-container').innerHTML = '<div style="text-align: center; padding: 50px;"><h2>Data Collection Declined</h2><p>You have declined data collection. This AI chatbot cannot function without storing conversation data.</p><p><a href="/">Refresh to reconsider</a></p></div>';
+        }
+
         function setViewportHeightVar() {
             const vh = window.innerHeight * 0.01;
             document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -603,6 +635,17 @@
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
+            // Check GDPR consent first
+            if (!checkGDPRConsent()) {
+                return; // Wait for user consent
+            }
+            
+            // If consent already given, initialize immediately
+            initializeChatApp();
+        });
+
+        // Main chat app initialization (called after consent or if consent already exists)
+        async function initializeChatApp() {
             const chatBox = document.getElementById('chat-box');
             const messageInput = document.getElementById('message-input');
             const sendButton = document.getElementById('send-button');
@@ -999,7 +1042,7 @@
                     sendMessage();
                 }
             });
-        }); // Close DOMContentLoaded callback - functions below need to be global for onclick handlers
+        } // Close initializeChatApp function
 
         // Menu functions (must be global scope for onclick handlers)
         async function checkMood() {

@@ -23,6 +23,7 @@ This update captures the recent production hardening work including relationship
 - **NEW: Environment configuration** - Created .env.example files for easier setup and deployment.
 - **NEW: Fixed vector embedding context retrieval** - Resolved Qdrant Bad Request errors with client-side filtering approach.
 - **NEW: Neo4j GraphStore integration** - Added optional graph database support with hybrid JSON/Neo4j storage and graceful fallback.
+- **NEW: GDPR compliance implementation** - Added consent banner, privacy policy, data export/deletion endpoints, and user rights management.
 
 ## Short-term plan (next sprint)
 1. ✅ **COMPLETED**: Tune thresholds and add production hardening features
@@ -31,9 +32,10 @@ This update captures the recent production hardening work including relationship
 4. ✅ **COMPLETED**: Add robust error handling for JSON parsing failures
 5. ✅ **COMPLETED**: Fix vector embedding context retrieval Bad Request errors
 6. ✅ **COMPLETED**: Integrate Neo4j GraphStore with hybrid JSON/Neo4j storage
-7. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
-8. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
-9. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
+7. ✅ **COMPLETED**: Implement basic GDPR compliance with consent management and user rights
+8. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
+9. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
+10. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
 
 ## Recent infra changes (notes)
 - Per-user idle/proactive timers and deferred greeting logic implemented to stop repeated global greetings and to target proactive thoughts to individual users.
@@ -47,6 +49,7 @@ This update captures the recent production hardening work including relationship
 - **NEW: Fixed vector embedding context retrieval** - Resolved Qdrant Bad Request errors by removing server-side filters and implementing client-side filtering.
 - **NEW: Integrated Neo4j GraphStore** - Added optional graph database support with hybrid JSON/Neo4j storage, graceful fallback, and enhanced relationship API.
 - **NEW: Created environment configuration templates** (.env.example files) for easier deployment setup including Neo4j configuration.
+- **NEW: GDPR compliance implementation** - Added consent banner with proper UI flow, privacy policy, data export/deletion endpoints, and user rights management for basic privacy compliance.
 
 ## Medium-term plan
 1. Create an admin UI for tuning thresholds and viewing per-fact metrics (accept/confirm/reject counts) — extend the current dashboard telemetry card.

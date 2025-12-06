@@ -2,9 +2,9 @@
   "project": {
     "name": "AURA.ai Chatbot",
     "description": "A proactive AI chatbot that simulates human-like thinking by generating thoughts, maintaining memory, and evolving personality with news-aware emotional intelligence",
-    "version": "0.8.0",
+    "version": "0.8.2",
     "repository": "https://github.com/SPhillips1337/AIChatbot.git",
-    "status": "Phase 3 Complete - Production-ready with external Qdrant cloud database, relationship tracking, hardened error handling, rate limiting, and improved chat logic"
+    "status": "Phase 3 Complete - Production-ready with external Qdrant cloud database, Neo4j GraphStore integration, vector embedding fixes, GDPR compliance, relationship tracking, hardened error handling, and rate limiting"
   },
   "architecture": {
     "overview": "Hybrid push/pull chat system with QDRANT vector database, news processing, and emotional state tracking. Uses remote LLM and embedding endpoints. Proactive thoughts are dynamically generated and influenced by current events.",
@@ -42,10 +42,22 @@
         "files": ["webhook-api/profileStore.js"],
         "status": "Implemented"
       },
+      "graphStore": {
+        "description": "Optional Neo4j graph database integration for advanced relationship queries.",
+        "implementation": "Hybrid storage system using both JSON profileStore and Neo4j GraphStore when configured.",
+        "files": ["webhook-api/graphStore.js"],
+        "status": "Implemented"
+      },
       "productionHardening": {
         "description": "Rate limiting, memory management, service health monitoring, and error handling.",
         "implementation": "Rate limiter, health checker, connection cleanup, and robust JSON parsing.",
         "files": ["webhook-api/rateLimiter.js", "webhook-api/healthChecker.js"],
+        "status": "Implemented"
+      },
+      "gdprCompliance": {
+        "description": "Basic GDPR compliance with consent management, privacy policy, and user data rights.",
+        "implementation": "Consent banner, privacy policy, data export/deletion endpoints, and user rights implementation.",
+        "files": ["privacy-policy.html", "index.html"],
         "status": "Implemented"
       },
       "infrastructureComponents": {
@@ -142,7 +154,10 @@
     "Robust error handling with graceful fallbacks",
     "Contextual mood/news injection (only on direct questions, not casual mentions)",
     "External Qdrant cloud database integration with API key authentication",
-    "Vector size validation and automatic adjustment for embedding compatibility"
+    "Dynamic vector size validation and automatic adjustment for embedding compatibility",
+    "Neo4j GraphStore integration with hybrid JSON/Neo4j storage and graceful fallback",
+    "Fixed vector embedding context retrieval with client-side filtering",
+    "Basic GDPR compliance with consent banner, privacy policy, and data export/deletion"
   ],
   "apiEndpoints": [
     {"endpoint": "/api/chat", "method": "POST", "description": "Main chat interface (rate limited, requires user session headers)"},
@@ -154,6 +169,9 @@
     {"endpoint": "/api/users/:userId/relationships", "method": "GET", "description": "Get user relationships and shared interests (auth required)"},
     {"endpoint": "/api/profile/confirm-fact", "method": "POST", "description": "Confirm or reject a candidate fact (requires auth)"},
     {"endpoint": "/api/profile/remove-fact", "method": "POST", "description": "Remove a stored fact from a profile (requires auth)"},
+    {"endpoint": "/api/gdpr/export", "method": "GET", "description": "Export all user data (GDPR compliance, requires auth)"},
+    {"endpoint": "/api/gdpr/delete-all", "method": "DELETE", "description": "Delete all user data (GDPR compliance, requires auth)"},
+    {"endpoint": "/privacy-policy.html", "method": "GET", "description": "Serve GDPR privacy policy"},
     {"endpoint": "/admin", "method": "GET", "description": "Serve admin dashboard to authenticated admins"},
     {"endpoint": "/", "method": "GET", "description": "Redirects to `/chat` once authentication completes"},
     {"endpoint": "/chat", "method": "GET", "description": "Serve chat UI from webhook API (same origin)"}
@@ -178,6 +196,9 @@
       "EMBEDDING_URL", 
       "QDRANT_URL",
       "QDRANT_API_KEY",
+      "NEO4J_URI (optional)",
+      "NEO4J_USER (optional)",
+      "NEO4J_PASSWORD (optional)",
       "PORT (optional)",
       "DEV_MOCK (optional)",
       "PARAPHRASE_QUESTIONS (optional)",
@@ -196,7 +217,7 @@
       "serviceHealth": "Graceful fallback to dev-mock when external services fail",
       "configValidation": "Startup validation of critical environment variables"
     },
-    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock. The system now uses external Qdrant cloud database with API key authentication and automatic vector size validation. The system is production-ready with comprehensive error handling and monitoring."
+    "notes": "This project can run in a local dev-mock mode (DEV_MOCK=true or via admin toggle) for testing without external LLM/embedding services. For production, configure real services and disable dev-mock. The system now uses external Qdrant cloud database with API key authentication and dynamic vector size validation. Neo4j GraphStore provides optional advanced relationship queries with graceful fallback to JSON storage. Vector embedding context retrieval has been fixed with client-side filtering. Basic GDPR compliance includes consent management, privacy policy, and user data rights. The system is production-ready with comprehensive error handling and monitoring."
   },
-  "lastUpdated": "2024-12-04T18:00:00Z"
+  "lastUpdated": "2024-12-06T18:15:00Z"
 }
