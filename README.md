@@ -60,6 +60,8 @@ The system runs automatically on startup and every 30 minutes thereafter.
 - **Production hardening**: Rate limiting, memory leak prevention, service health monitoring, and configuration validation.
 - **Improved chat logic**: Fixed intrusive mood/news injection to be more contextual and natural.
 - **Robust JSON parsing**: Better error handling for malformed LLM responses in news processing.
+- **Vector embedding fixes**: Dynamic vector size detection and client-side filtering to resolve Qdrant Bad Request errors.
+- **Neo4j GraphStore integration**: Optional graph database support with hybrid JSON/Neo4j storage and graceful fallback.
 
 ## Components
 
@@ -104,6 +106,9 @@ The system runs automatically on startup and every 30 minutes thereafter.
 - `EMBEDDING_URL` - Base URL for embedding calls (required for embedding-backed matcher in production)
 - `QDRANT_URL` - Qdrant endpoint (local: http://localhost:6333 or cloud: https://your-cluster.region.aws.cloud.qdrant.io)
 - `QDRANT_API_KEY` - API key for Qdrant cloud instances (not needed for local)
+- `NEO4J_URI` - Neo4j database URI (optional, e.g., bolt://localhost:7687)
+- `NEO4J_USER` - Neo4j username (optional)
+- `NEO4J_PASSWORD` - Neo4j password (optional)
 - `PORT` - Server port
 - `DEV_MOCK` - If `true` returns canned embeddings/responses for local testing
 - Note: If you edit `webhook-api/fact_definitions.js`, restart the webhook-api server to refresh preloaded example embeddings.
@@ -197,6 +202,7 @@ AIChatbot/
 │   ├── server.js              # Main API and WebSocket server
 │   ├── embeddingMatcher.js    # Embedding-backed semantic matcher
 │   ├── fact_definitions.js    # Structured fact definitions and examples
+│   ├── graphStore.js          # Neo4j graph database integration (optional)
 │   ├── news-processor.js      # News analysis and mood system
 │   ├── news-data.json         # Mood state persistence
 │   ├── profile.json           # Profile store (persisted)

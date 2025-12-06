@@ -36,6 +36,9 @@ const config = {
 let devMock = process.env.DEV_MOCK === 'true';
 console.log('DEV_MOCK:', devMock);
 
+// Global variable to store the actual vector size
+let VECTOR_SIZE = 1024;
+
 // Validate critical configuration
 if (!devMock && (!config.llmUrl.startsWith('http') || !config.embeddingUrl.startsWith('http'))) {
   console.error('ERROR: LLM_URL and EMBEDDING_URL must be valid HTTP URLs when DEV_MOCK=false');
@@ -52,6 +55,22 @@ const qdrant = new QdrantClient(qdrantConfig);
 // Initialize stores and managers
 const profileStore = require('./profileStore'); // Keep this import as it's used later
 const telemetryStore = require('./telemetryStore');
+
+// Initialize GraphStore if Neo4j is configured
+let graphStore = null;
+try {
+  if (process.env.NEO4J_URI && process.env.NEO4J_USER && process.env.NEO4J_PASSWORD) {
+    const GraphStore = require('./graphStore');
+    graphStore = new GraphStore();
+    console.log('GraphStore initialized with Neo4j');
+  } else {
+    console.log('Neo4j not configured, using JSON-based profileStore only');
+  }
+} catch (error) {
+  console.warn('GraphStore initialization failed:', error.message);
+  console.log('Falling back to JSON-based profileStore');
+}
+
 const externalInput = new ExternalInputManager(qdrant, config, { generateResponse, generateEmbedding: generateEmbeddings });
 
 const DEFAULT_ADMIN_USER_IDS = [
@@ -577,23 +596,23 @@ async function initializeCollection() {
       // First, let's test the embedding to get the actual dimension
       console.log('Testing embedding API to determine vector dimensions...');
       const testEmbedding = await generateEmbeddings('test');
-      const vectorSize = testEmbedding ? testEmbedding.length : 1024; // fallback to 1024
+      VECTOR_SIZE = testEmbedding ? testEmbedding.length : 1024;
 
-      console.log(`Creating collection with vector size: ${vectorSize}`);
+      console.log(`Creating collection with vector size: ${VECTOR_SIZE}`);
       await qdrant.createCollection(config.collectionName, {
-        vectors: { size: vectorSize, distance: 'Cosine' }
+        vectors: { size: VECTOR_SIZE, distance: 'Cosine' }
       });
       console.log(`Created collection: ${config.collectionName}`);
     } else {
-      // Get existing collection info to validate vector size
+      // Get existing collection info and set global vector size
       const collectionInfo = await qdrant.getCollection(config.collectionName);
-      const expectedSize = collectionInfo.config.params.vectors.size;
-      console.log(`Collection exists with vector size: ${expectedSize}`);
+      VECTOR_SIZE = collectionInfo.config.params.vectors.size;
+      console.log(`Collection exists with vector size: ${VECTOR_SIZE}`);
 
       // Test current embedding size matches collection
       const testEmbedding = await generateEmbeddings('test');
-      if (testEmbedding && testEmbedding.length !== expectedSize) {
-        console.warn(`WARNING: Embedding size mismatch! Collection expects ${expectedSize}, got ${testEmbedding.length}`);
+      if (testEmbedding && testEmbedding.length !== VECTOR_SIZE) {
+        console.warn(`WARNING: Embedding size mismatch! Collection expects ${VECTOR_SIZE}, got ${testEmbedding.length}`);
       }
     }
   } catch (error) {
@@ -654,15 +673,14 @@ async function storeConversation(userId, userMessage, botResponse, embedding) {
 
     console.log(`Storing conversation with embedding size: ${embedding.length}`);
 
-    // Ensure vector size matches collection (1024 for current setup)
-    const expectedSize = 1024;
+    // Ensure vector size matches collection
     let finalEmbedding = embedding;
-    if (embedding.length !== expectedSize) {
-      console.warn(`Vector size mismatch: got ${embedding.length}, expected ${expectedSize}. Adjusting...`);
-      if (embedding.length > expectedSize) {
-        finalEmbedding = embedding.slice(0, expectedSize);
+    if (embedding.length !== VECTOR_SIZE) {
+      console.warn(`Vector size mismatch: got ${embedding.length}, expected ${VECTOR_SIZE}. Adjusting...`);
+      if (embedding.length > VECTOR_SIZE) {
+        finalEmbedding = embedding.slice(0, VECTOR_SIZE);
       } else {
-        finalEmbedding = [...embedding, ...new Array(expectedSize - embedding.length).fill(0)];
+        finalEmbedding = [...embedding, ...new Array(VECTOR_SIZE - embedding.length).fill(0)];
       }
     }
 
@@ -696,26 +714,29 @@ async function retrieveContext(userId, query, limit = 3) {
     // Generate embeddings for the query
     const queryEmbedding = await generateEmbeddings(query);
 
-    // Normalize embedding to match collection dimensions (1024)
-    const normalizedEmbedding = fixEmbeddingSize(queryEmbedding, 1024);
+    // Normalize embedding to match collection dimensions
+    const normalizedEmbedding = fixEmbeddingSize(queryEmbedding, VECTOR_SIZE);
 
-    // Search for similar conversations
+    console.log(`Searching with vector size: ${normalizedEmbedding.length}, userId: ${userId}`);
+
+    // Search for similar conversations (temporarily without filter to test)
     const searchResult = await qdrant.search(config.collectionName, {
       vector: normalizedEmbedding,
-      filter: {
-        must: [{ key: 'userId', match: { value: userId } }]
-      },
       limit,
       with_payload: true
     });
 
-    return searchResult.map(point => point.payload);
+    // Filter results by userId in code instead
+    const userResults = searchResult.filter(point => point.payload.userId === userId);
+    return userResults.map(point => point.payload);
 
   } catch (error) {
+    console.error('Error retrieving context:', error.message);
     if (error.response && error.response.data) {
-      console.error('Error retrieving context (Qdrant):', JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error('Error retrieving context:', error.message);
+      console.error('Qdrant error details:', JSON.stringify(error.response.data, null, 2));
+    }
+    if (error.status) {
+      console.error('HTTP status:', error.status);
     }
     return [];
   }
@@ -970,7 +991,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 });
 
 // API endpoint for user relationships
-app.get('/api/users/:userId/relationships', requireAuth(), (req, res) => {
+app.get('/api/users/:userId/relationships', requireAuth(), async (req, res) => {
   const { userId } = req.params;
   const { type } = req.query;
 
@@ -981,7 +1002,17 @@ app.get('/api/users/:userId/relationships', requireAuth(), (req, res) => {
   const relationships = profileStore.getRelationships(userId, type);
   const sharedInterests = profileStore.findUsersWithSharedInterests(userId);
 
-  res.json({ relationships, sharedInterests });
+  // Also get GraphStore context if available
+  let graphContext = null;
+  if (graphStore) {
+    try {
+      graphContext = await graphStore.getUserContext(userId);
+    } catch (error) {
+      console.warn('Failed to get GraphStore context:', error.message);
+    }
+  }
+
+  res.json({ relationships, sharedInterests, graphContext });
 });
 
 // API endpoint for all user profiles
@@ -1506,6 +1537,15 @@ async function generateDiscoveryQuestion(userId) {
     // Persist profile
     profileStore.saveProfile(userId, profile);
 
+    // Also save to GraphStore if available
+    if (graphStore) {
+      try {
+        await graphStore.addUserFact(userId, key, value);
+      } catch (error) {
+        console.warn('Failed to save fact to GraphStore:', error.message);
+      }
+    }
+
     // Return structured object so callers can emit discovery messages with key
     return { question, key: candidate.key };
   } catch (error) {
@@ -1586,6 +1626,17 @@ async function updateUserProfile(userId, message, sentiment) {
     // Update in-memory cache and persist
     userProfiles.set(userId, profile);
     profileStore.saveProfile(userId, profile);
+
+    // Create user in GraphStore if available and not already created
+    if (graphStore && !profile.graphStoreCreated) {
+      try {
+        await graphStore.createUser(userId, profile.name || `User_${userId.slice(0, 8)}`);
+        profile.graphStoreCreated = true;
+        profileStore.saveProfile(userId, profile);
+      } catch (error) {
+        console.warn('Failed to create user in GraphStore:', error.message);
+      }
+    }
 
     return profile;
   } catch (err) {
@@ -2141,4 +2192,25 @@ server.listen(config.port, async () => {
   // Per-user proactive timers are used now; do not start global proactive thoughts on boot.
   // Individual user idle timers start when a WS client connects or authenticates.
   // startProactiveThoughts(); (disabled)
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down gracefully...');
+  
+  // Close GraphStore connection
+  if (graphStore) {
+    try {
+      await graphStore.close();
+      console.log('GraphStore connection closed');
+    } catch (error) {
+      console.warn('Error closing GraphStore:', error.message);
+    }
+  }
+  
+  // Close WebSocket server
+  wss.close(() => {
+    console.log('WebSocket server closed');
+    process.exit(0);
+  });
 });

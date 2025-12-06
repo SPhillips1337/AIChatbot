@@ -21,15 +21,19 @@ This update captures the recent production hardening work including relationship
 - **NEW: Migrated to external Qdrant cloud database** - Updated system to use cloud-hosted Qdrant with API key authentication.
 - **NEW: Vector size validation** - Added automatic vector size validation and adjustment to prevent Bad Request errors.
 - **NEW: Environment configuration** - Created .env.example files for easier setup and deployment.
+- **NEW: Fixed vector embedding context retrieval** - Resolved Qdrant Bad Request errors with client-side filtering approach.
+- **NEW: Neo4j GraphStore integration** - Added optional graph database support with hybrid JSON/Neo4j storage and graceful fallback.
 
 ## Short-term plan (next sprint)
 1. ✅ **COMPLETED**: Tune thresholds and add production hardening features
 2. ✅ **COMPLETED**: Add relationship tracking system for user connections
 3. ✅ **COMPLETED**: Fix intrusive mood/news injection in chat responses
 4. ✅ **COMPLETED**: Add robust error handling for JSON parsing failures
-5. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
-6. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
-7. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
+5. ✅ **COMPLETED**: Fix vector embedding context retrieval Bad Request errors
+6. ✅ **COMPLETED**: Integrate Neo4j GraphStore with hybrid JSON/Neo4j storage
+7. Add unit/integration tests for `extractStructuredFacts`, embedding matcher, and confirmation flows.
+8. Add aggregated telemetry views (counts by event type and fact key) and CSV export for offline analysis.
+9. Consider adding a server-side WS heartbeat/ping to complement client-side keepalives and to detect stale sockets behind proxies.
 
 ## Recent infra changes (notes)
 - Per-user idle/proactive timers and deferred greeting logic implemented to stop repeated global greetings and to target proactive thoughts to individual users.
@@ -39,8 +43,10 @@ This update captures the recent production hardening work including relationship
 - Extended profileStore.js with relationship tracking capabilities and shared interest discovery.
 - Improved chat logic to be more contextual and less intrusive with mood/news injection.
 - **NEW: Migrated to external Qdrant cloud database** with API key authentication for improved scalability and reliability.
-- **NEW: Added vector size validation** to automatically handle embedding dimension mismatches and prevent storage errors.
-- **NEW: Created environment configuration templates** (.env.example files) for easier deployment setup.
+- **NEW: Added dynamic vector size validation** to automatically handle embedding dimension mismatches and prevent storage errors.
+- **NEW: Fixed vector embedding context retrieval** - Resolved Qdrant Bad Request errors by removing server-side filters and implementing client-side filtering.
+- **NEW: Integrated Neo4j GraphStore** - Added optional graph database support with hybrid JSON/Neo4j storage, graceful fallback, and enhanced relationship API.
+- **NEW: Created environment configuration templates** (.env.example files) for easier deployment setup including Neo4j configuration.
 
 ## Medium-term plan
 1. Create an admin UI for tuning thresholds and viewing per-fact metrics (accept/confirm/reject counts) — extend the current dashboard telemetry card.
