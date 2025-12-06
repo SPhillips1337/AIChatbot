@@ -492,7 +492,16 @@ wss.on('connection', (ws) => {
           // clear anonymous greet timer if present
           if (ws._greetTimer) { clearTimeout(ws._greetTimer); ws._greetTimer = null; }
 
+          // Clean up old anonymous state if this socket was previously anonymous
+          const oldClientId = ws._clientId;
+          if (oldClientId && oldClientId !== data.userId) {
+            stopProactiveThoughtsFor(oldClientId);
+            userStates.delete(oldClientId);
+            console.log('Cleaned up anonymous state for', oldClientId);
+          }
+
           ws.userId = data.userId;
+          ws._clientId = data.userId; // Update client ID to match user ID
           userSockets.set(data.userId, ws);
           console.log('WebSocket authenticated for user:', data.userId);
           // create per-user state and reset idle timer
@@ -516,8 +525,18 @@ wss.on('connection', (ws) => {
         } else if (!token) {
           // clear anonymous greet timer if present
           if (ws._greetTimer) { clearTimeout(ws._greetTimer); ws._greetTimer = null; }
+
+          // Clean up old anonymous state if this socket was previously anonymous
+          const oldClientId = ws._clientId;
+          if (oldClientId && oldClientId !== data.userId) {
+            stopProactiveThoughtsFor(oldClientId);
+            userStates.delete(oldClientId);
+            console.log('Cleaned up anonymous state for', oldClientId);
+          }
+
           // Allow anonymous bind without token (best-effort)
           ws.userId = data.userId;
+          ws._clientId = data.userId; // Update client ID to match user ID
           userSockets.set(data.userId, ws);
           console.log('WebSocket associated with user (no token):', data.userId);
           const state = getOrCreateUserState(data.userId, ws);
@@ -558,7 +577,17 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     console.log('Client disconnected');
-    if (ws.userId) userSockets.delete(ws.userId);
+    if (ws.userId) {
+      userSockets.delete(ws.userId);
+      // Also clean up user state and stop proactive thoughts
+      stopProactiveThoughtsFor(ws.userId);
+      userStates.delete(ws.userId);
+    }
+    if (ws._clientId && ws._clientId !== ws.userId) {
+      // Clean up anonymous state if different from userId
+      stopProactiveThoughtsFor(ws._clientId);
+      userStates.delete(ws._clientId);
+    }
     if (ws._greetTimer) clearTimeout(ws._greetTimer);
   });
 
