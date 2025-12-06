@@ -13,6 +13,34 @@ AURA.ai Chatbot uses a sophisticated architecture with external data integration
 3.  **Remote AI Models**: The system uses a remote, OpenAI-compatible endpoint (like Ollama) for both language model inference and text embeddings.
 4.  **Vector Database (QDRANT)**: Stores conversation history and news context with semantic search capabilities for intelligent context retrieval.
 5.  **News Processing**: Automated RSS feed processing with emotional analysis and mood tracking.
+6. **External Input System**: Integrated multiple data sources (RSS, Twitter Trends, Google Trends) and deep research via Perplexica/SearxNG to enrich AI awareness. The system fetches, deduplicates, researches, analyzes mood, and stores enriched items in Qdrant for proactive use.
+## External Input System
+
+The new External Input System replaces the old NewsProcessor and provides a unified pipeline for ingesting diverse external data:
+
+- **Sources**: RSS feeds, Twitter trending topics, Google Trends daily searches.
+- **Research Augmentation**: For short or ambiguous items, the system queries a local Perplexica or SearxNG instance to obtain a concise summary.
+- **Analysis**: Each item is sent to the LLM to assess emotional impact (mood score) and extract key topics.
+- **Storage**: Results are embedded and up‑serted into Qdrant with rich metadata (`source`, `title`, `url`, `mood`, `topics`, `reaction`).
+- **Proactive Thoughts**: The AI can now generate thoughts based on a broader set of current events, not just RSS news.
+
+### Configuration
+Add the following environment variables to your `.env`:
+
+```
+PERPLEXICA_URL=http://localhost:3000/api/search
+SEARXNG_URL=http://localhost:8080
+TWITTER_API_KEY=your_key
+TWITTER_API_SECRET=your_secret
+TWITTER_ACCESS_TOKEN=your_token
+TWITTER_ACCESS_SECRET=your_access_secret
+GOOGLE_TRENDS_API_KEY=your_key   # optional if using paid API
+```
+
+### Usage
+The existing `/api/process-news` endpoint now triggers `externalInput.processAll()`, which runs the full pipeline. You can also call it manually via GET for testing.
+
+The system runs automatically on startup and every 30 minutes thereafter.
 
 ## Key Additions (recent)
 

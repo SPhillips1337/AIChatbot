@@ -17,7 +17,7 @@ const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const { QdrantClient } = require('@qdrant/js-client-rest');
-const NewsProcessor = require('./news-processor');
+const ExternalInputManager = require('./external-input');
 const accountStore = require('./accountStore');
 const rateLimit = require('./rateLimiter');
 
@@ -49,8 +49,10 @@ if (config.qdrantApiKey) {
 }
 const qdrant = new QdrantClient(qdrantConfig);
 
-// Initialize News Processor
-const newsProcessor = new NewsProcessor(qdrant, config);
+// Initialize stores and managers
+const profileStore = require('./profileStore'); // Keep this import as it's used later
+const telemetryStore = require('./telemetryStore');
+const externalInput = new ExternalInputManager(qdrant, config, { generateResponse, generateEmbedding: generateEmbeddings });
 
 const DEFAULT_ADMIN_USER_IDS = [
   '2351d788-4fb9-4dcf-88a1-56f63e06f649'
@@ -100,8 +102,9 @@ function requireAuth(options = {}) {
   };
 }
 // Inject dependencies
-newsProcessor.generateResponse = generateResponse;
-newsProcessor.generateEmbedding = generateEmbeddings;
+// Inject dependencies - handling by constructor in ExternalInputManager
+// externalInput.generateResponse = generateResponse;
+// externalInput.generateEmbedding = generateEmbeddings;
 
 // Ensure thoughts directory exists
 if (!fs.existsSync(config.thoughtsDir)) {
@@ -137,10 +140,8 @@ async function generateProactiveThought(userId = null) {
   try {
     // 30% chance to generate news-influenced thought
     if (Math.random() < 0.3) {
-      const newsThought = await newsProcessor.generateNewsInfluencedThought();
-      if (newsThought) {
-        return newsThought;
-      }
+      const newsThought = await externalInput.generateNewsInfluencedThought();
+      if (newsThought) return newsThought;
     }
 
     // 25% chance to ask a discovery question if we have a userId and don't know much about them
@@ -695,9 +696,12 @@ async function retrieveContext(userId, query, limit = 3) {
     // Generate embeddings for the query
     const queryEmbedding = await generateEmbeddings(query);
 
+    // Normalize embedding to match collection dimensions (1024)
+    const normalizedEmbedding = fixEmbeddingSize(queryEmbedding, 1024);
+
     // Search for similar conversations
     const searchResult = await qdrant.search(config.collectionName, {
-      vector: queryEmbedding,
+      vector: normalizedEmbedding,
       filter: {
         must: [{ key: 'userId', match: { value: userId } }]
       },
@@ -708,9 +712,21 @@ async function retrieveContext(userId, query, limit = 3) {
     return searchResult.map(point => point.payload);
 
   } catch (error) {
-    console.error('Error retrieving context:', error.message);
+    if (error.response && error.response.data) {
+      console.error('Error retrieving context (Qdrant):', JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.error('Error retrieving context:', error.message);
+    }
     return [];
   }
+}
+
+// Helper function to normalize embedding vectors
+function fixEmbeddingSize(embedding, targetSize) {
+  if (!embedding) return new Array(targetSize).fill(0);
+  if (embedding.length === targetSize) return embedding;
+  if (embedding.length > targetSize) return embedding.slice(0, targetSize);
+  return [...embedding, ...new Array(targetSize - embedding.length).fill(0)];
 }
 
 // Generate response from LLM
@@ -853,9 +869,9 @@ app.get('/api/dashboard', requireAuth({ admin: true }), async (req, res) => {
 
     const dashboard = {
       mood: {
-        score: newsProcessor.moodState.score,
-        description: newsProcessor.getMoodDescription(),
-        topics: newsProcessor.moodState.topics.slice(0, 10)
+        score: externalInput.moodState.score,
+        description: externalInput.getMoodDescription(),
+        topics: externalInput.moodState.topics.slice(0, 10)
       },
       newsStories,
       recentActivity: (recentActivity.points || []).map(point => ({
@@ -991,11 +1007,11 @@ app.delete('/api/news/:id', requireAuth({ admin: true }), async (req, res) => {
 // API endpoint for manual news processing (POST)
 app.post('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
   try {
-    console.log('Manual news processing triggered');
-    await newsProcessor.processNewsFeeds();
+    console.log('Manual external input processing triggered');
+    await externalInput.processAll();
     res.json({
       success: true,
-      mood: newsProcessor.moodState,
+      mood: externalInput.moodState,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1007,11 +1023,11 @@ app.post('/api/process-news', requireAuth({ admin: true }), async (req, res) => 
 // API endpoint for manual news processing (GET - for browser access)
 app.get('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
   try {
-    console.log('Manual news processing triggered via GET');
-    await newsProcessor.processNewsFeeds();
+    console.log('Manual external input processing triggered via GET');
+    await externalInput.processAll();
     res.json({
       success: true,
-      mood: newsProcessor.moodState,
+      mood: externalInput.moodState,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1023,23 +1039,23 @@ app.get('/api/process-news', requireAuth({ admin: true }), async (req, res) => {
 // Admin endpoint to reset mood
 app.post('/api/admin/reset-mood', requireAuth({ admin: true }), async (req, res) => {
   try {
-    newsProcessor.moodState = { score: 0, topics: [] };
-    newsProcessor.saveMoodState();
+    externalInput.moodState = { score: 0, topics: [] };
+    externalInput.saveMoodState();
     try {
-      fs.writeFileSync(newsProcessor.newsPath, JSON.stringify(newsProcessor.moodState, null, 2));
+      fs.writeFileSync(externalInput.statePath, JSON.stringify(externalInput.moodState, null, 2));
     } catch (e) {
       console.error('Error clearing news-data.json:', e.message);
       try {
         const os = require('os');
         const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
-        fs.writeFileSync(fallbackPath, JSON.stringify(newsProcessor.moodState, null, 2));
-        newsProcessor.newsPath = fallbackPath;
+        fs.writeFileSync(fallbackPath, JSON.stringify(externalInput.moodState, null, 2));
+        externalInput.statePath = fallbackPath;
         console.log('Wrote cleared mood to fallback path:', fallbackPath);
       } catch (err2) {
         console.error('Failed to write cleared mood to fallback path:', err2.message);
       }
     }
-    res.json({ success: true, mood: newsProcessor.moodState });
+    res.json({ success: true, mood: externalInput.moodState });
   } catch (err) {
     console.error('Error resetting mood:', err);
     res.status(500).json({ error: 'Failed to reset mood' });
@@ -1062,16 +1078,16 @@ app.post('/api/admin/clear-news', requireAuth({ admin: true }), async (req, res)
     }
 
     // Reset in-memory moodState and persist
-    newsProcessor.moodState = { score: 0, topics: [] };
+    externalInput.moodState = { score: 0, topics: [] };
     try {
-      fs.writeFileSync(newsProcessor.newsPath, JSON.stringify(newsProcessor.moodState, null, 2));
+      fs.writeFileSync(externalInput.statePath, JSON.stringify(externalInput.moodState, null, 2));
     } catch (e) {
       console.error('Error clearing news-data.json:', e.message);
       try {
         const os = require('os');
         const fallbackPath = path.join(os.tmpdir(), 'news-data.json');
-        fs.writeFileSync(fallbackPath, JSON.stringify(newsProcessor.moodState, null, 2));
-        newsProcessor.newsPath = fallbackPath;
+        fs.writeFileSync(fallbackPath, JSON.stringify(externalInput.moodState, null, 2));
+        externalInput.statePath = fallbackPath;
         console.log('Wrote cleared mood to fallback path:', fallbackPath);
       } catch (err2) {
         console.error('Failed to write cleared mood to fallback path:', err2.message);
@@ -1089,9 +1105,9 @@ app.post('/api/admin/clear-news', requireAuth({ admin: true }), async (req, res)
 app.get('/api/mood', (req, res) => {
   try {
     const mood = {
-      score: newsProcessor.moodState.score,
-      description: newsProcessor.getMoodDescription(),
-      topics: newsProcessor.moodState.topics.slice(0, 10),
+      score: externalInput.moodState.score,
+      description: externalInput.getMoodDescription(),
+      topics: externalInput.moodState.topics.slice(0, 10),
       timestamp: new Date().toISOString()
     };
     res.json(mood);
@@ -1144,9 +1160,9 @@ app.post('/api/auth/login', (req, res) => {
 const aiTools = {
   async checkMood() {
     return {
-      score: newsProcessor.moodState.score,
-      description: newsProcessor.getMoodDescription(),
-      topics: newsProcessor.moodState.topics.slice(0, 10),
+      score: externalInput.moodState.score,
+      description: externalInput.getMoodDescription(),
+      topics: externalInput.moodState.topics.slice(0, 10),
       timestamp: new Date().toISOString()
     };
   },
@@ -1260,8 +1276,8 @@ const personalitySystem = {
 };
 
 // User personality tracking
-const profileStore = require('./profileStore');
-const telemetryStore = require('./telemetryStore');
+// const profileStore = require('./profileStore'); // Already imported above
+// const telemetryStore = require('./telemetryStore'); // Already initialized above
 const userProfiles = new Map();
 
 const factDefinitions = require('./fact_definitions');
@@ -1696,8 +1712,8 @@ You form and evolve opinions based on news and user interactions.`
     }
 
     if (userSentiment !== 0) {
-      newsProcessor.moodState.score = Math.max(-10, Math.min(10, newsProcessor.moodState.score + userSentiment));
-      newsProcessor.saveMoodState();
+      externalInput.moodState.score = Math.max(-10, Math.min(10, externalInput.moodState.score + userSentiment));
+      externalInput.saveMoodState();
     }
 
     // 6. Check if user is asking about mood/feelings and inject real data
@@ -2112,14 +2128,14 @@ server.listen(config.port, async () => {
     console.error('Error preloading example embeddings:', e);
   }
 
-  // Process news feeds on startup
-  console.log('Processing initial news feeds...');
-  await newsProcessor.processNewsFeeds();
+  // Process news/external feeds on startup
+  console.log('Processing initial external inputs...');
+  await externalInput.processAll();
 
-  // Set up periodic news processing (every 30 minutes)
+  // Set up periodic external input processing (every 30 minutes)
   setInterval(async () => {
-    console.log('Processing news feeds...');
-    await newsProcessor.processNewsFeeds();
+    console.log('Processing external inputs...');
+    await externalInput.processAll();
   }, 30 * 60 * 1000);
 
   // Per-user proactive timers are used now; do not start global proactive thoughts on boot.

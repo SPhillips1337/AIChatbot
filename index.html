@@ -533,9 +533,24 @@
         </div>
     </div>
 
+    <div id="beta-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Welcome to AURA.ai (Beta)</h2>
+            <p style="text-align: left; margin-bottom: 1rem;">
+                Thank you for trying out this application. Please be aware that it is currently in active development.
+            </p>
+            <p style="text-align: left; margin-bottom: 1rem;">
+                This means you may encounter bugs, and features may change. Your data may be wiped during updates. We appreciate your understanding and feedback!
+            </p>
+            <button id="close-beta-modal">Acknowledge & Continue</button>
+        </div>
+    </div>
+
+
     <script>
         const STORAGE_KEYS = {
-            auth: 'phpaibot_auth_v1'
+            auth: 'phpaibot_auth_v1',
+            betaDismissed: 'aura_beta_dismissed_v1'
         };
         const LEGACY_KEYS = ['phpaibot_user_id', 'phpaibot_display_name'];
         let userId = null;
@@ -597,6 +612,19 @@
             const menuToggle = document.getElementById('menuToggle');
             // ws is now global scope - declared above
             let isTyping = false;
+
+            // Beta disclaimer modal logic
+            const betaModal = document.getElementById('beta-modal');
+            const closeBetaModal = document.getElementById('close-beta-modal');
+            
+            if (!localStorage.getItem(STORAGE_KEYS.betaDismissed)) {
+                betaModal.classList.remove('hidden');
+            }
+
+            closeBetaModal.addEventListener('click', () => {
+                betaModal.classList.add('hidden');
+                localStorage.setItem(STORAGE_KEYS.betaDismissed, 'true');
+            });
 
             if (dashboardLink) {
                 dashboardLink.addEventListener('click', (event) => {
