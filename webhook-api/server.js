@@ -495,17 +495,33 @@ wss.on('connection', (ws) => {
           // Clean up old anonymous state if this socket was previously anonymous
           const oldClientId = ws._clientId;
           if (oldClientId && oldClientId !== data.userId) {
+            // Preserve conversation state from old anonymous session
+            const oldState = userStates.get(oldClientId);
+            const preservedState = oldState ? {
+              waitingForResponse: oldState.waitingForResponse,
+              checkInSent: oldState.checkInSent,
+              lastMessage: oldState.lastMessage
+            } : {};
+            
             stopProactiveThoughtsFor(oldClientId);
             userStates.delete(oldClientId);
             console.log('Cleaned up anonymous state for', oldClientId);
+            
+            // Create new state with preserved conversation state
+            ws.userId = data.userId;
+            ws._clientId = data.userId; // Update client ID to match user ID
+            userSockets.set(data.userId, ws);
+            console.log('WebSocket authenticated for user:', data.userId);
+            const state = getOrCreateUserState(data.userId, ws);
+            Object.assign(state, preservedState);
+          } else {
+            // create per-user state and reset idle timer
+            ws.userId = data.userId;
+            ws._clientId = data.userId; // Update client ID to match user ID
+            userSockets.set(data.userId, ws);
+            console.log('WebSocket authenticated for user:', data.userId);
+            const state = getOrCreateUserState(data.userId, ws);
           }
-
-          ws.userId = data.userId;
-          ws._clientId = data.userId; // Update client ID to match user ID
-          userSockets.set(data.userId, ws);
-          console.log('WebSocket authenticated for user:', data.userId);
-          // create per-user state and reset idle timer
-          const state = getOrCreateUserState(data.userId, ws);
           // sync greeted flag from persisted profile if available
           try {
             const profile = await profileStore.getProfile ? profileStore.getProfile(data.userId) : null;
@@ -529,17 +545,33 @@ wss.on('connection', (ws) => {
           // Clean up old anonymous state if this socket was previously anonymous
           const oldClientId = ws._clientId;
           if (oldClientId && oldClientId !== data.userId) {
+            // Preserve conversation state from old anonymous session
+            const oldState = userStates.get(oldClientId);
+            const preservedState = oldState ? {
+              waitingForResponse: oldState.waitingForResponse,
+              checkInSent: oldState.checkInSent,
+              lastMessage: oldState.lastMessage
+            } : {};
+            
             stopProactiveThoughtsFor(oldClientId);
             userStates.delete(oldClientId);
             console.log('Cleaned up anonymous state for', oldClientId);
+            
+            // Allow anonymous bind without token (best-effort)
+            ws.userId = data.userId;
+            ws._clientId = data.userId; // Update client ID to match user ID
+            userSockets.set(data.userId, ws);
+            console.log('WebSocket associated with user (no token):', data.userId);
+            const state = getOrCreateUserState(data.userId, ws);
+            Object.assign(state, preservedState);
+          } else {
+            // Allow anonymous bind without token (best-effort)
+            ws.userId = data.userId;
+            ws._clientId = data.userId; // Update client ID to match user ID
+            userSockets.set(data.userId, ws);
+            console.log('WebSocket associated with user (no token):', data.userId);
+            const state = getOrCreateUserState(data.userId, ws);
           }
-
-          // Allow anonymous bind without token (best-effort)
-          ws.userId = data.userId;
-          ws._clientId = data.userId; // Update client ID to match user ID
-          userSockets.set(data.userId, ws);
-          console.log('WebSocket associated with user (no token):', data.userId);
-          const state = getOrCreateUserState(data.userId, ws);
           resetIdleTimeoutFor(data.userId);
           if (!state.greeted) {
             try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
