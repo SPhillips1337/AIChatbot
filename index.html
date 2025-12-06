@@ -274,7 +274,7 @@
         }
 
         .modal-content button {
-            width: 100%;
+            width: auto;
             padding: 12px;
             border-radius: 8px;
             border: none;
@@ -476,18 +476,46 @@
                 flex-direction: column;
             }
         }
+
+        /* Feedback form styling */
+        #feedback-form label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+        }
+
+        #feedback-form select,
+        #feedback-form input,
+        #feedback-form textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        #feedback-form textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
     </style>
 </head>
 
 <body>
     <!-- GDPR Consent Banner -->
-    <div id="gdpr-banner" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: white; padding: 15px; z-index: 10000; text-align: center;">
+    <div id="gdpr-banner"
+        style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: white; padding: 15px; z-index: 10000; text-align: center;">
         <p style="margin: 0 0 10px 0;">
-            🍪 This AI chatbot collects and stores conversation data, personal facts, and behavioral patterns to provide personalized responses. 
+            🍪 This AI chatbot collects and stores conversation data, personal facts, and behavioral patterns to provide
+            personalized responses.
             <a href="/privacy-policy.html" target="_blank" style="color: #ffc107;">Privacy Policy</a>
         </p>
-        <button onclick="acceptGDPR()" style="background: #28a745; color: white; border: none; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px;">Accept & Continue</button>
-        <button onclick="declineGDPR()" style="background: #dc3545; color: white; border: none; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px;">Decline</button>
+        <button onclick="acceptGDPR()"
+            style="background: #28a745; color: white; border: none; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px;">Accept
+            & Continue</button>
+        <button onclick="declineGDPR()"
+            style="background: #dc3545; color: white; border: none; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px;">Decline</button>
     </div>
 
     <div class="menu-bar">
@@ -498,6 +526,7 @@
         <button id="menuToggle" class="menu-toggle" aria-label="Toggle menu">☰</button>
         <div class="menu-links" id="menuLinks">
             <a id="profileLink" href="#">👤 Profile</a>
+            <a href="#" onclick="showFeedbackForm()">📝 Feedback</a>
             <a id="dashboardLink" href="#" target="_blank" data-admin-only>📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
             <a href="#" onclick="processNews()" data-admin-only>📰 News</a>
@@ -549,12 +578,42 @@
                 Thank you for trying out this application. Please be aware that it is currently in active development.
             </p>
             <p style="text-align: left; margin-bottom: 1rem;">
-                This means you may encounter bugs, and features may change. Your data may be wiped during updates. We appreciate your understanding and feedback!
+                This means you may encounter bugs, and features may change. Your data may be wiped during updates. We
+                appreciate your understanding and feedback!
             </p>
             <button id="close-beta-modal">Acknowledge & Continue</button>
         </div>
     </div>
 
+    <!-- Feedback Modal -->
+    <div id="feedback-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Send Feedback</h2>
+            <p>Help us improve AURA.ai by sharing your thoughts!</p>
+            <form id="feedback-form">
+                <label for="feedback-type">Type:</label>
+                <select id="feedback-type" required>
+                    <option value="">Select feedback type</option>
+                    <option value="bug">🐛 Bug Report</option>
+                    <option value="feature">💡 Feature Request</option>
+                    <option value="improvement">⚡ Improvement</option>
+                    <option value="general">💬 General Feedback</option>
+                </select>
+
+                <label for="feedback-subject">Subject:</label>
+                <input type="text" id="feedback-subject" placeholder="Brief description" required>
+
+                <label for="feedback-message">Message:</label>
+                <textarea id="feedback-message" rows="6" placeholder="Describe your feedback in detail..."
+                    required></textarea>
+
+                <div style="margin-top: 15px; text-align: right;">
+                    <button type="button" onclick="closeFeedbackModal()">Cancel</button>
+                    <button type="submit" style="margin-left: 10px;">Send Feedback</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         const STORAGE_KEYS = {
@@ -639,7 +698,7 @@
             if (!checkGDPRConsent()) {
                 return; // Wait for user consent
             }
-            
+
             // If consent already given, initialize immediately
             initializeChatApp();
         });
@@ -659,7 +718,7 @@
             // Beta disclaimer modal logic
             const betaModal = document.getElementById('beta-modal');
             const closeBetaModal = document.getElementById('close-beta-modal');
-            
+
             if (!localStorage.getItem(STORAGE_KEYS.betaDismissed)) {
                 betaModal.classList.remove('hidden');
             }
@@ -1043,6 +1102,43 @@
                 }
             });
         } // Close initializeChatApp function
+
+        // Feedback functions
+        function showFeedbackForm() {
+            document.getElementById('feedback-modal').classList.remove('hidden');
+        }
+
+        function closeFeedbackModal() {
+            document.getElementById('feedback-modal').classList.add('hidden');
+            document.getElementById('feedback-form').reset();
+        }
+
+        // Handle feedback form submission
+        document.addEventListener('DOMContentLoaded', () => {
+            const feedbackForm = document.getElementById('feedback-form');
+            if (feedbackForm) {
+                feedbackForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+
+                    const type = document.getElementById('feedback-type').value;
+                    const subject = document.getElementById('feedback-subject').value;
+                    const message = document.getElementById('feedback-message').value;
+
+                    // Create mailto link with pre-filled content
+                    const emailSubject = `AURA.ai Feedback: ${type.toUpperCase()} - ${subject}`;
+                    const emailBody = `Feedback Type: ${type}\n\nMessage:\n${message}\n\n---\nUser ID: ${userId || 'Anonymous'}\nTimestamp: ${new Date().toISOString()}`;
+
+                    const mailtoLink = `mailto:feedback@happymonkey.ai?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+
+                    // Open email client
+                    window.location.href = mailtoLink;
+
+                    // Close modal and show confirmation
+                    closeFeedbackModal();
+                    alert('Thank you! Your email client should open with the feedback pre-filled.');
+                });
+            }
+        });
 
         // Menu functions (must be global scope for onclick handlers)
         async function checkMood() {
