@@ -422,6 +422,9 @@ function sendCheckInFor(key) {
   }
   state.checkInSent = true;
 
+  // Stop proactive thoughts immediately after check-in
+  stopProactiveThoughtsFor(key);
+
   // Wait another configured quiet duration, then go quiet
   setTimeout(() => {
     if (state.waitingForResponse) {
