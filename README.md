@@ -4,6 +4,8 @@ AURA.ai Chatbot is a proactive chatbot that simulates human-like thinking by gen
 
 This project demonstrates a hybrid push/pull chat system with news-aware AI personality and emotional state tracking.
 
+A demo is currently available at https://aura.happymonkey.ai/ though it is in a beta state and subject to change. Please be aware that it is currently in active development, which means you may encounter bugs, and features may change. Your data may be wiped during updates.
+
 ## Architecture
 
 AURA.ai Chatbot uses a sophisticated architecture with external data integration:
