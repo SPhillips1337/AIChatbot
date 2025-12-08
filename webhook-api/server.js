@@ -218,19 +218,9 @@ let conversationState = {
 };
 
 function startProactiveThoughts() {
-  if (proactiveInterval) return;
-
-  console.log('Proactive thoughts started.');
-
-  // Send initial thought
-  sendInitialThought();
-
-  // Set up check-in after 5 minutes of no response
-  proactiveInterval = setTimeout(() => {
-    if (conversationState.waitingForResponse && !conversationState.checkInSent) {
-      sendCheckIn();
-    }
-  }, parseInt(process.env.PROACTIVE_CHECKIN_MS) || 300000); // 5 minutes
+  // DISABLED: Global proactive thoughts replaced with per-user system
+  console.log('Global startProactiveThoughts called - ignoring (using per-user system)');
+  return;
 }
 
 async function sendInitialThought(userId = null) {
@@ -312,18 +302,9 @@ function sendCheckIn() {
 }
 
 function resetIdleTimeout() {
-  // Reset conversation state - user is active
-  conversationState.waitingForResponse = false;
-  conversationState.checkInSent = false;
-
-  stopProactiveThoughts();
-  if (idleTimeout) {
-    clearTimeout(idleTimeout);
-  }
-  idleTimeout = setTimeout(() => {
-    console.log('User idle for 10 minutes, starting gentle proactive engagement.');
-    startProactiveThoughts();
-  }, parseInt(process.env.IDLE_TIMEOUT_MS) || 600000); // 10 minutes
+  // DISABLED: Global idle timeout system replaced with per-user timers
+  // This function is kept for compatibility but does nothing
+  console.log('Global resetIdleTimeout called - ignoring (using per-user timers)');
 }
 
 
@@ -338,7 +319,7 @@ function makeAnonId() {
 function getOrCreateUserState(key, ws = null) {
   if (!key) return null;
   if (!userStates.has(key)) {
-    userStates.set(key, { idleTimeout: null, proactiveTimeout: null, waitingForResponse: false, checkInSent: false, lastMessage: null, ws: ws || null, greeted: false });
+    userStates.set(key, { idleTimeout: null, proactiveTimeout: null, waitingForResponse: false, checkInSent: false, isQuiet: false, lastMessage: null, ws: ws || null, greeted: false });
   }
   const state = userStates.get(key);
   if (ws) state.ws = ws;
@@ -359,6 +340,10 @@ function startProactiveThoughtsFor(key) {
   const state = getOrCreateUserState(key);
   if (!state) return;
   if (state.proactiveTimeout) return;
+  if (state.isQuiet) {
+    console.log('User is in quiet mode, skipping proactive thoughts for', key);
+    return;
+  }
 
   console.log('Proactive thoughts started for', key);
   // Send initial thought
@@ -434,17 +419,33 @@ function sendCheckInFor(key) {
         ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: quietMessage, timestamp: new Date().toISOString() }));
       }
       stopProactiveThoughtsFor(key);
+      
+      // Clear idle timeout to prevent restarting proactive thoughts
+      if (state.idleTimeout) {
+        clearTimeout(state.idleTimeout);
+        state.idleTimeout = null;
+      }
+      
+      // Mark as quiet to prevent further proactive engagement
+      state.isQuiet = true;
     }
   }, parseInt(process.env.PROACTIVE_QUIET_MS) || 120000);
 }
 
-function resetIdleTimeoutFor(key) {
+function resetIdleTimeoutFor(key, forceReset = false) {
   const state = getOrCreateUserState(key);
   if (!state) return;
+
+  // Don't reset idle timer if user is in quiet mode unless forced
+  if (state.isQuiet && !forceReset) {
+    console.log('User is in quiet mode, not resetting idle timer for', key);
+    return;
+  }
 
   // Reset conversation state - user is active
   state.waitingForResponse = false;
   state.checkInSent = false;
+  state.isQuiet = false; // Clear quiet mode when user is active
 
   stopProactiveThoughtsFor(key);
   if (state.idleTimeout) {
@@ -530,7 +531,8 @@ wss.on('connection', (ws) => {
             const profile = await profileStore.getProfile ? profileStore.getProfile(data.userId) : null;
             if (profile && profile.greeted) state.greeted = true;
           } catch (e) { /* ignore */ }
-          resetIdleTimeoutFor(data.userId);
+          // Don't reset idle timer on reconnection - preserve quiet state
+          // resetIdleTimeoutFor(data.userId);
           // Send greeting only once per user (persist on profile)
           if (!state.greeted) {
             try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
@@ -575,7 +577,8 @@ wss.on('connection', (ws) => {
             console.log('WebSocket associated with user (no token):', data.userId);
             const state = getOrCreateUserState(data.userId, ws);
           }
-          resetIdleTimeoutFor(data.userId);
+          // Don't reset idle timer on reconnection - preserve quiet state  
+          // resetIdleTimeoutFor(data.userId);
           if (!state.greeted) {
             try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
             state.greeted = true;
@@ -601,7 +604,7 @@ wss.on('connection', (ws) => {
         }
         // Otherwise, treat as real activity and reset idle timer for this user/socket
         const key = ws.userId || (ws._clientId = ws._clientId || makeAnonId());
-        resetIdleTimeoutFor(key);
+        resetIdleTimeoutFor(key, true); // Force reset on real activity
         return;
       }
 
@@ -1746,8 +1749,8 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
     const role = ensureAccountRole(authedAccount);
 
     const lowerMessage = message.toLowerCase();
-    // Reset the idle timer on every user interaction (per-user)
-    resetIdleTimeoutFor(userId);
+    // Reset the idle timer on every user interaction (per-user) - force reset to clear quiet mode
+    resetIdleTimeoutFor(userId, true);
 
     // 1. Define the system prompt with user personality context + AI opinions
     const userProfile = getOrCreateProfile(userId);
