@@ -155,12 +155,100 @@ let idleTimeout = null;
 // --- Dynamic AI proactive thoughts ---
 
 // Generate a proactive thought using LLM
+function ensureTimeConsistency(message, correctTimeOfDay) {
+  if (!message) return message;
+  
+  // Define conflicting time references
+  const timeReferences = {
+    morning: ['morning', 'dawn', 'sunrise', 'early'],
+    afternoon: ['afternoon', 'midday', 'noon', 'lunch'],
+    evening: ['evening', 'dusk', 'sunset', 'twilight'],
+    night: ['night', 'midnight', 'late night', 'nighttime']
+  };
+  
+  let cleanedMessage = message;
+  
+  // Remove conflicting time references
+  Object.keys(timeReferences).forEach(timeKey => {
+    if (timeKey !== correctTimeOfDay) {
+      timeReferences[timeKey].forEach(ref => {
+        const regex = new RegExp(`\\b${ref}\\b`, 'gi');
+        cleanedMessage = cleanedMessage.replace(regex, correctTimeOfDay);
+      });
+    }
+  });
+  
+  // Remove specific conflicting phrases
+  const conflictingPhrases = [
+    'late afternoon light',
+    'morning sun',
+    'evening breeze',
+    'night sky',
+    'dawn breaking',
+    'sunset colors'
+  ];
+  
+  conflictingPhrases.forEach(phrase => {
+    const regex = new RegExp(phrase, 'gi');
+    cleanedMessage = cleanedMessage.replace(regex, `${correctTimeOfDay} atmosphere`);
+  });
+  
+  return cleanedMessage;
+}
+
+// Helper functions for message deduplication
+function isMessageSimilar(newMessage, recentMessages) {
+  if (!newMessage || !recentMessages || recentMessages.length === 0) return false;
+  
+  const newWords = newMessage.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  
+  for (const recent of recentMessages) {
+    const recentWords = recent.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const commonWords = newWords.filter(w => recentWords.includes(w));
+    
+    // If more than 40% of significant words are common, consider it similar
+    if (commonWords.length / Math.max(newWords.length, 1) > 0.4) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function addToRecentMessages(userState, message) {
+  if (!userState.recentProactiveMessages) {
+    userState.recentProactiveMessages = [];
+  }
+  
+  userState.recentProactiveMessages.push(message);
+  
+  // Keep only last 5 messages to prevent memory bloat
+  if (userState.recentProactiveMessages.length > 5) {
+    userState.recentProactiveMessages.shift();
+  }
+}
+
 async function generateProactiveThought(userId = null) {
   try {
+    // Get current time context
+    const now = new Date();
+    const hour = now.getUTCHours();
+    let timeOfDay = 'day';
+    if (hour >= 5 && hour < 12) timeOfDay = 'morning';
+    else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
+    else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
+    else timeOfDay = 'night';
+
+    // Get user state for deduplication
+    const userState = userId ? userStates.get(userId) : null;
+    const recentMessages = userState?.recentProactiveMessages || [];
+
     // 30% chance to generate news-influenced thought
     if (Math.random() < 0.3) {
       const newsThought = await externalInput.generateNewsInfluencedThought();
-      if (newsThought) return newsThought;
+      if (newsThought && !isMessageSimilar(newsThought, recentMessages)) {
+        if (userState) addToRecentMessages(userState, newsThought);
+        return newsThought;
+      }
     }
 
     // 25% chance to ask a discovery question if we have a userId and don't know much about them
@@ -171,34 +259,55 @@ async function generateProactiveThought(userId = null) {
       }
     }
 
-    let contextPrompt = "Generate a brief, interesting observation or gentle conversation starter. Make it feel like a natural thought you're sharing, not a direct question demanding a response. Examples: 'I was just thinking about...' or 'Something interesting I noticed...'";
+    let contextPrompt = `Generate a brief, interesting observation or gentle conversation starter appropriate for ${timeOfDay} time (GMT). Make it feel like a natural thought you're sharing, not a direct question demanding a response. Consider the time of day in your response. Examples: 'I was just thinking about...' or 'Something interesting I noticed...'`;
 
     // If we have a userId, get recent context
     if (userId) {
       const recentContext = await retrieveContext(userId, "recent conversation", 2);
       if (recentContext.length > 0) {
         const topics = recentContext.map(c => c.userMessage + " " + c.botResponse).join(" ");
-        contextPrompt = `Based on our recent conversation about: "${topics.substring(0, 200)}...", share a gentle follow-up thought or observation. Make it conversational, like you're continuing to think about our discussion, not asking a direct question.`;
+        contextPrompt = `Based on our recent conversation about: "${topics.substring(0, 200)}...", share a gentle follow-up thought or observation appropriate for ${timeOfDay} time (GMT). Make it conversational, like you're continuing to think about our discussion, not asking a direct question.`;
       }
     }
 
     const messages = [
-      { role: 'system', content: 'You are Aura. Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions.' },
+      { role: 'system', content: `You are Aura. Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions. It is currently ${timeOfDay} in GMT time zone. DO NOT mention other times of day - only reference ${timeOfDay}. Be consistent with the time context.` },
       { role: 'user', content: contextPrompt }
     ];
 
     const response = await generateResponse(messages);
-    return response || "I've been thinking about how fascinating conversations can be...";
+    let thought = response || `I've been thinking about how fascinating conversations can be...`;
+    
+    // Post-process to ensure time consistency
+    thought = ensureTimeConsistency(thought, timeOfDay);
+    
+    // Check for similarity and add to recent messages
+    if (!isMessageSimilar(thought, recentMessages)) {
+      if (userState) addToRecentMessages(userState, thought);
+      return thought;
+    }
+
+    // If similar, try a fallback
+    const fallbacks = [
+      `I've been pondering how creativity works in different minds this ${timeOfDay}...`,
+      `Something interesting about human curiosity just occurred to me this ${timeOfDay}...`,
+      `I was just reflecting on how much we can learn from simple conversations...`
+    ];
+    const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    if (userState) addToRecentMessages(userState, fallback);
+    return fallback;
 
   } catch (error) {
     console.error('Error generating proactive thought:', error);
-    // Fallback thoughts - more natural
-    const fallbacks = [
-      "I've been pondering how creativity works in different minds...",
-      "Something interesting about human curiosity just occurred to me...",
-      "I was just reflecting on how much we can learn from simple conversations..."
-    ];
-    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    const now = new Date();
+    const hour = now.getUTCHours();
+    let timeOfDay = 'day';
+    if (hour >= 5 && hour < 12) timeOfDay = 'morning';
+    else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
+    else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
+    else timeOfDay = 'night';
+    
+    return `I've been thinking about how fascinating conversations can be this ${timeOfDay}...`;
   }
 }
 
@@ -319,7 +428,17 @@ function makeAnonId() {
 function getOrCreateUserState(key, ws = null) {
   if (!key) return null;
   if (!userStates.has(key)) {
-    userStates.set(key, { idleTimeout: null, proactiveTimeout: null, waitingForResponse: false, checkInSent: false, isQuiet: false, lastMessage: null, ws: ws || null, greeted: false });
+    userStates.set(key, { 
+      idleTimeout: null, 
+      proactiveTimeout: null, 
+      waitingForResponse: false, 
+      checkInSent: false, 
+      isQuiet: false, 
+      lastMessage: null, 
+      ws: ws || null, 
+      greeted: false,
+      recentProactiveMessages: [] // Track recent messages to prevent repetition
+    });
   }
   const state = userStates.get(key);
   if (ws) state.ws = ws;
@@ -399,8 +518,18 @@ async function sendInitialThoughtFor(key) {
 function sendCheckInFor(key) {
   const state = userStates.get(key);
   if (!state) return;
+  
+  // Get current time context
+  const now = new Date();
+  const hour = now.getUTCHours();
+  let timeOfDay = 'day';
+  if (hour >= 5 && hour < 12) timeOfDay = 'morning';
+  else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
+  else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
+  else timeOfDay = 'night';
+  
   console.log('Sending check-in to', key);
-  const checkInMessage = "Are you still there? No worries if you're busy - I'll wait quietly until you're ready to chat.";
+  const checkInMessage = `Are you still there? No worries if you're busy this ${timeOfDay} - I'll wait quietly until you're ready to chat.`;
   const ws = state.ws;
   if (ws && ws.readyState === require('ws').OPEN) {
     ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: checkInMessage, timestamp: new Date().toISOString() }));
@@ -414,7 +543,7 @@ function sendCheckInFor(key) {
   setTimeout(() => {
     if (state.waitingForResponse) {
       console.log('Going quiet for', key, '- user appears to be away');
-      const quietMessage = "I'll wait here quietly. Just say hello when you're ready to chat again! 😊";
+      const quietMessage = `I'll wait here quietly. Just say hello when you're ready to chat again! 😊`;
       if (ws && ws.readyState === require('ws').OPEN) {
         ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: quietMessage, timestamp: new Date().toISOString() }));
       }
