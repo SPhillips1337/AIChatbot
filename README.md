@@ -65,6 +65,7 @@ The system runs automatically on startup and every 30 minutes thereafter.
 - **Vector embedding fixes**: Dynamic vector size detection and client-side filtering to resolve Qdrant Bad Request errors.
 - **Neo4j GraphStore integration**: Optional graph database support with hybrid JSON/Neo4j storage and graceful fallback.
 - **GDPR compliance**: Basic privacy compliance with consent banner, privacy policy, and data export/deletion endpoints.
+- **Deep Agents**: Sandboxed code execution environment (`opencode`) controlled via SSH for performing complex tasks (e.g., calculation, file manipulation) triggered by `/agent` or `/deep` commands.
 
 ## Components
 
@@ -72,6 +73,7 @@ The system runs automatically on startup and every 30 minutes thereafter.
 - **Node.js Backend**: The core of the application, handling chat logic, memory, WebSocket communication, and news processing.
 - **QDRANT Vector Database**: Provides semantic search and context storage. Configure `QDRANT_URL` and `QDRANT_API_KEY` to point to your Qdrant cloud instance or local server.
 - **LLM & Embeddings**: Expects OpenAI-compatible endpoints (configure `LLM_URL` and `EMBEDDING_URL`). The server calls `v1/chat/completions` and `v1/embeddings` paths — compatible gateways include Ollama, OpenRouter, or other OpenAI-style APIs.
+- **Code Sandbox (Opencode)**: A secure PHP/Apache container with SSH access, allowing the AI to execute code safely. Located in `opencode/`.
 
 ## Features
 
@@ -146,7 +148,12 @@ The system runs automatically on startup and every 30 minutes thereafter.
     docker compose up -d --build webhook-api
     # or locally for development:
     PORT=4002 node webhook-api/server.js
+    # Start Deep Agent Sandbox (in a separate terminal)
+    cd opencode
+    docker compose up -d --build
+    cd ..
     ```
+
 
 5.  **Open the chat UI:** `https://localhost/chat` (or `http://localhost:4002/chat`)
 
@@ -176,7 +183,13 @@ The system runs automatically on startup and every 30 minutes thereafter.
 
 Client should send an initial WS auth frame on connect: `{ type: 'auth', userId, token }` so server can target messages to that user.
 
-## API Endpoints (high-level)
+## Deep Agents (Beta)
+The system now supports "Deep Agents" — a capability to execute code in a sandboxed environment.
+- **Trigger**: Start your message with `/agent` or `/deep` followed by your request.
+  - Example: `/agent List all files in the current web directory`
+  - Example: `/deep Calculate the 100th Fibonacci number using Python`
+- **Architecture**: The main `webhook-api` connects to the `opencode` container via SSH (port 2222) to execute tasks.
+
 - `/api/chat` (POST) — Main conversational endpoint (rate limited)
 - `/api/profile/confirm-fact` (POST) — Confirm/reject a candidate fact
 - `/api/profile/remove-fact` (POST) — Remove a stored fact (auth required)

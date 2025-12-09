@@ -75,6 +75,8 @@ services:
     environment:
       - PORT=${PORT:-3000}
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on: []
 
   # PHP Development Server (for local development)
