@@ -2401,8 +2401,9 @@ app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
 
 // Admin-only GDPR Data Deletion endpoint for a specific user
 app.delete('/api/admin/gdpr/delete-all/:userId', requireAuth({ admin: true }), async (req, res) => {
+  let userId;
   try {
-    const { userId } = req.params;
+    userId = req.params.userId;
 
     // Delete profile
     await profileStore.deleteProfile(userId);
@@ -2490,8 +2491,9 @@ app.get('/api/gdpr/export', requireAuth(), async (req, res) => {
 
 // Admin-only GDPR Data Export endpoint for a specific user
 app.get('/api/admin/gdpr/export/:userId', requireAuth({ admin: true }), async (req, res) => {
+  let userId;
   try {
-    const { userId } = req.params;
+    userId = req.params.userId;
 
     // Get profile data
     const profile = await profileStore.getProfile(userId);
