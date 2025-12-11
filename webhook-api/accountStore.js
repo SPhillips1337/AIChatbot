@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
@@ -6,19 +6,21 @@ const FILE_PATH = path.join(__dirname, 'accounts.json');
 
 let accounts = {};
 let idIndex = new Map();
+let loadingPromise = null;
 
-function load() {
+async function load() {
   try {
-    if (fs.existsSync(FILE_PATH)) {
-      const data = JSON.parse(fs.readFileSync(FILE_PATH, 'utf8') || '{}');
-      accounts = data;
-    } else {
-      accounts = {};
-      fs.writeFileSync(FILE_PATH, JSON.stringify(accounts, null, 2));
-    }
+    await fs.access(FILE_PATH);
+    const data = await fs.readFile(FILE_PATH, 'utf8');
+    accounts = JSON.parse(data || '{}');
   } catch (err) {
-    console.error('Failed to load account store:', err);
-    accounts = {};
+    if (err.code === 'ENOENT') {
+      accounts = {};
+      await persist();
+    } else {
+      console.error('Failed to load account store:', err);
+      accounts = {};
+    }
   }
 
   let changed = false;
@@ -41,7 +43,7 @@ function load() {
 
   rebuildIndex();
   if (changed) {
-    persist();
+    await persist();
   }
 }
 
@@ -52,9 +54,9 @@ function rebuildIndex() {
   });
 }
 
-function persist() {
+async function persist() {
   try {
-    fs.writeFileSync(FILE_PATH, JSON.stringify(accounts, null, 2));
+    await fs.writeFile(FILE_PATH, JSON.stringify(accounts, null, 2));
     rebuildIndex();
   } catch (err) {
     console.error('Failed to persist account store:', err);
@@ -80,7 +82,8 @@ function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
 
-function createAccount(username, password) {
+async function createAccount(username, password) {
+  await loadingPromise;
   if (!username || !password) {
     throw new Error('Username and password are required');
   }
@@ -112,7 +115,7 @@ function createAccount(username, password) {
     role: 'user',
     created_at: new Date().toISOString()
   };
-  persist();
+  await persist();
   return {
     userId,
     username: displayName,
@@ -121,7 +124,8 @@ function createAccount(username, password) {
   };
 }
 
-function verifyCredentials(username, password) {
+async function verifyCredentials(username, password) {
+  await loadingPromise;
   if (!username || !password) return null;
   const normalized = normalizeUsername(username);
   const account = accounts[normalized];
@@ -137,7 +141,8 @@ function verifyCredentials(username, password) {
   return null;
 }
 
-function issueSessionToken(userId) {
+async function issueSessionToken(userId) {
+  await loadingPromise;
   const account = getAccountById(userId);
   if (!account) return null;
   const normalized = account.normalizedUsername;
@@ -145,11 +150,12 @@ function issueSessionToken(userId) {
   const token = generateSessionToken();
   account.sessionToken = token;
   accounts[normalized].sessionToken = token;
-  persist();
+  await persist();
   return token;
 }
 
-function verifySessionToken(userId, token) {
+async function verifySessionToken(userId, token) {
+  await loadingPromise;
   if (!userId || !token) return false;
   const account = getAccountById(userId);
   if (!account || !account.sessionToken) return false;
@@ -160,7 +166,8 @@ function getAccountById(userId) {
   return idIndex.get(userId) || null;
 }
 
-function listAccounts() {
+async function listAccounts() {
+  await loadingPromise;
   return Object.values(accounts).map(({ username, userId, created_at, role }) => ({
     username,
     userId,
@@ -169,7 +176,8 @@ function listAccounts() {
   }));
 }
 
-function assignRoleByUserId(userId, role = 'user') {
+async function assignRoleByUserId(userId, role = 'user') {
+  await loadingPromise;
   const account = getAccountById(userId);
   if (!account) return false;
   const normalized = account.normalizedUsername;
@@ -177,11 +185,22 @@ function assignRoleByUserId(userId, role = 'user') {
   if (account.role === role) return true;
   account.role = role;
   accounts[normalized].role = role;
-  persist();
+  await persist();
   return true;
 }
 
-load();
+async function deleteAccount(userId) {
+  await loadingPromise;
+  const account = getAccountById(userId);
+  if (!account) return false;
+  const normalized = account.normalizedUsername;
+  if (!normalized || !accounts[normalized]) return false;
+  delete accounts[normalized];
+  await persist();
+  return true;
+}
+
+loadingPromise = load();
 
 module.exports = {
   createAccount,
@@ -190,6 +209,6 @@ module.exports = {
   listAccounts,
   assignRoleByUserId,
   issueSessionToken,
-  verifySessionToken
+  verifySessionToken,
+  deleteAccount
 };
-
