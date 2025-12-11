@@ -84,12 +84,16 @@ const ADMIN_USER_IDS = new Set([
   ...(process.env.ADMIN_USER_IDS ? process.env.ADMIN_USER_IDS.split(',').map(id => id.trim()) : [])
 ].filter(Boolean));
 
-ADMIN_USER_IDS.forEach(id => accountStore.assignRoleByUserId(id, 'admin'));
+(async () => {
+  for (const id of ADMIN_USER_IDS) {
+    await accountStore.assignRoleByUserId(id, 'admin');
+  }
+})();
 
-function ensureAccountRole(account) {
+async function ensureAccountRole(account) {
   if (!account) return 'user';
   if (ADMIN_USER_IDS.has(account.userId)) {
-    accountStore.assignRoleByUserId(account.userId, 'admin');
+    await accountStore.assignRoleByUserId(account.userId, 'admin');
     account.role = 'admin';
   }
   if (!account.role) {
@@ -98,21 +102,21 @@ function ensureAccountRole(account) {
   return account.role;
 }
 
-function authenticateRequest(req) {
+async function authenticateRequest(req) {
   const userId = req.headers['x-user-id'];
   const token = req.headers['x-auth-token'];
   if (!userId || !token) return null;
   const account = accountStore.getAccountById(userId);
   if (!account) return null;
-  if (!accountStore.verifySessionToken(userId, token)) return null;
-  ensureAccountRole(account);
+  if (!await accountStore.verifySessionToken(userId, token)) return null;
+  await ensureAccountRole(account);
   return account;
 }
 
 function requireAuth(options = {}) {
   const { admin = false } = options;
-  return (req, res, next) => {
-    const account = authenticateRequest(req);
+  return async (req, res, next) => {
+    const account = await authenticateRequest(req);
     if (!account) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
@@ -624,7 +628,7 @@ wss.on('connection', (ws) => {
       if (data.type === 'auth' && data.userId) {
         // Verify token if provided
         const token = data.token;
-        if (token && accountStore.verifySessionToken(data.userId, token)) {
+        if (token && await accountStore.verifySessionToken(data.userId, token)) {
           // clear anonymous greet timer if present
           if (ws._greetTimer) { clearTimeout(ws._greetTimer); ws._greetTimer = null; }
 
@@ -660,7 +664,7 @@ wss.on('connection', (ws) => {
           }
           // sync greeted flag from persisted profile if available
           try {
-            const profile = await profileStore.getProfile ? profileStore.getProfile(data.userId) : null;
+            const profile = await profileStore.getProfile ? await profileStore.getProfile(data.userId) : null;
             if (profile && profile.greeted) state.greeted = true;
           } catch (e) { /* ignore */ }
           // Don't reset idle timer on reconnection - preserve quiet state
@@ -670,9 +674,9 @@ wss.on('connection', (ws) => {
             try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
             state.greeted = true;
             try {
-              const p = getOrCreateProfile(data.userId);
+              const p = await getOrCreateProfile(data.userId);
               p.greeted = true;
-              profileStore.saveProfile(data.userId, p);
+              await profileStore.saveProfile(data.userId, p);
             } catch (e) { console.warn('Failed to persist greeted flag', e.message || e); }
           }
         } else if (!token) {
@@ -715,9 +719,9 @@ wss.on('connection', (ws) => {
             try { ws.send(JSON.stringify({ sender: 'AI', type: 'greeting', message: "Hello! I'm Aura. Feel free to start a conversation whenever you're ready." })); } catch (e) { }
             state.greeted = true;
             try {
-              const p = getOrCreateProfile(data.userId);
+              const p = await getOrCreateProfile(data.userId);
               p.greeted = true;
-              profileStore.saveProfile(data.userId, p);
+              await profileStore.saveProfile(data.userId, p);
             } catch (e) { console.warn('Failed to persist greeted flag', e.message || e); }
           }
         }
@@ -1210,8 +1214,8 @@ app.get('/api/users/:userId/relationships', requireAuth({ admin: true }), async 
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  const relationships = profileStore.getRelationships(userId, type);
-  const sharedInterests = profileStore.findUsersWithSharedInterests(userId);
+  const relationships = await profileStore.getRelationships(userId, type);
+  const sharedInterests = await profileStore.findUsersWithSharedInterests(userId);
 
   // Also get GraphStore context if available
   let graphContext = null;
@@ -1360,13 +1364,13 @@ app.get('/api/mood', (req, res) => {
 });
 
 // Authentication endpoints
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { username, password } = req.body || {};
   try {
-    const account = accountStore.createAccount(username, password);
+    const account = await accountStore.createAccount(username, password);
     const savedAccount = accountStore.getAccountById(account.userId);
-    const role = ensureAccountRole(savedAccount);
-    const token = account.token || accountStore.issueSessionToken(savedAccount.userId);
+    const role = await ensureAccountRole(savedAccount);
+    const token = account.token || await accountStore.issueSessionToken(savedAccount.userId);
     res.json({
       success: true,
       userId: savedAccount.userId,
@@ -1380,14 +1384,14 @@ app.post('/api/auth/register', (req, res) => {
   }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body || {};
-  const account = accountStore.verifyCredentials(username, password);
+  const account = await accountStore.verifyCredentials(username, password);
   if (!account) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
-  const role = ensureAccountRole(account);
-  const token = accountStore.issueSessionToken(account.userId);
+  const role = await ensureAccountRole(account);
+  const token = await accountStore.issueSessionToken(account.userId);
   res.json({
     success: true,
     userId: account.userId,
@@ -1692,7 +1696,7 @@ function detectMissingFacts(profile) {
 async function generateDiscoveryQuestion(userId) {
   try {
     // Ensure profile is loaded and shaped
-    let profile = userProfiles.get(userId) || profileStore.getProfile(userId) || createNewProfile();
+    let profile = userProfiles.get(userId) || await profileStore.getProfile(userId) || createNewProfile();
     profile = ensureProfileShape(profile);
 
     profile.askedQuestions = profile.askedQuestions || [];
@@ -1746,7 +1750,7 @@ async function generateDiscoveryQuestion(userId) {
     profile.askedQuestions.push(askedEntry);
 
     // Persist profile
-    profileStore.saveProfile(userId, profile);
+    await profileStore.saveProfile(userId, profile);
 
     // Also save to GraphStore if available
     if (graphStore) {
@@ -1778,10 +1782,10 @@ function createNewProfile() {
   };
 }
 
-function getOrCreateProfile(userId) {
+async function getOrCreateProfile(userId) {
   let profile = userProfiles.get(userId);
   if (!profile) {
-    profile = profileStore.getProfile(userId) || createNewProfile();
+    profile = await profileStore.getProfile(userId) || createNewProfile();
     profile = ensureProfileShape(profile);
     userProfiles.set(userId, profile);
   } else {
@@ -1811,7 +1815,7 @@ function applyDisplayNameToProfile(profile, name) {
 async function updateUserProfile(userId, message, sentiment) {
   try {
     // Load from in-memory cache or persistent store
-    let profile = getOrCreateProfile(userId);
+    let profile = await getOrCreateProfile(userId);
 
     profile.interactions = (profile.interactions || 0) + 1;
     profile.avgSentiment = ((profile.avgSentiment || 0) * (profile.interactions - 1) + sentiment) / profile.interactions;
@@ -1836,14 +1840,14 @@ async function updateUserProfile(userId, message, sentiment) {
 
     // Update in-memory cache and persist
     userProfiles.set(userId, profile);
-    profileStore.saveProfile(userId, profile);
+    await profileStore.saveProfile(userId, profile);
 
     // Create user in GraphStore if available and not already created
     if (graphStore && !profile.graphStoreCreated) {
       try {
         await graphStore.createUser(userId, profile.name || `User_${userId.slice(0, 8)}`);
         profile.graphStoreCreated = true;
-        profileStore.saveProfile(userId, profile);
+        await profileStore.saveProfile(userId, profile);
       } catch (error) {
         console.warn('Failed to create user in GraphStore:', error.message);
       }
@@ -1886,18 +1890,18 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
     if (!account) {
       return res.status(401).json({ error: 'Unknown user account. Please log out and log back in.' });
     }
-    const authedAccount = authenticateRequest(req);
+    const authedAccount = await authenticateRequest(req);
     if (!authedAccount || authedAccount.userId !== userId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    const role = ensureAccountRole(authedAccount);
+    const role = await ensureAccountRole(authedAccount);
 
     const lowerMessage = message.toLowerCase();
     // Reset the idle timer on every user interaction (per-user) - force reset to clear quiet mode
     resetIdleTimeoutFor(userId, true);
 
     // 1. Define the system prompt with user personality context + AI opinions
-    const userProfile = getOrCreateProfile(userId);
+    const userProfile = await getOrCreateProfile(userId);
     const effectiveDisplayName = account.username;
     if (effectiveDisplayName) {
       applyDisplayNameToProfile(userProfile, effectiveDisplayName);
@@ -2063,7 +2067,7 @@ You form and evolve opinions based on news and user interactions.`
     try {
       const extracted = extractStructuredFacts(message);
       if (Array.isArray(extracted) && extracted.length > 0) {
-        const profile = getOrCreateProfile(userId);
+        const profile = await getOrCreateProfile(userId);
         profile.askedQuestions = profile.askedQuestions || [];
         for (const candidate of extracted) {
           const key = candidate.key;
@@ -2079,7 +2083,7 @@ You form and evolve opinions based on news and user interactions.`
               source: 'extraction',
               updatedAt: new Date().toISOString()
             };
-            profileStore.saveProfile(userId, profile);
+            await profileStore.saveProfile(userId, profile);
 
             // Telemetry: record auto-save from extraction
             try { telemetryStore.appendEvent({ type: 'fact_autosave', userId, key, value, confidence: conf, source: 'extraction' }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
@@ -2116,7 +2120,7 @@ You form and evolve opinions based on news and user interactions.`
           const key = semantic.key;
           const value = semantic.value;
           const sim = semantic.similarity || 0;
-          const profile = getOrCreateProfile(userId);
+          const profile = await getOrCreateProfile(userId);
           profile.askedQuestions = profile.askedQuestions || [];
 
           if (sim >= parseFloat(process.env.EMBED_AUTO_SAVE_SIM || '0.90')) {
@@ -2128,7 +2132,7 @@ You form and evolve opinions based on news and user interactions.`
               source: 'embedding_match',
               updatedAt: new Date().toISOString()
             };
-            profileStore.saveProfile(userId, profile);
+            await profileStore.saveProfile(userId, profile);
 
             // Telemetry: record auto-save from embedding matcher
             try { telemetryStore.appendEvent({ type: 'fact_autosave', userId, key, value, confidence: 0.95, source: 'embedding_match', similarity: sim }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
@@ -2223,7 +2227,7 @@ app.get('/api/evolution', requireAuth({ admin: true }), async (req, res) => {
 });
 
 // Profile confirmation endpoint for discovery questions
-app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
+app.post('/api/profile/confirm-fact', requireAuth(), async (req, res) => {
   try {
     const { userId: bodyUserId, key, value, confirmed } = req.body || {};
     if (!bodyUserId || !key) return res.status(400).json({ error: 'userId and key are required' });
@@ -2234,7 +2238,7 @@ app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const profile = getOrCreateProfile(bodyUserId);
+    const profile = await getOrCreateProfile(bodyUserId);
     profile.askedQuestions = profile.askedQuestions || [];
 
     const asked = profile.askedQuestions.find(q => q.key === key);
@@ -2267,7 +2271,7 @@ app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
       }
     }
 
-    profileStore.saveProfile(bodyUserId, profile);
+    await profileStore.saveProfile(bodyUserId, profile);
     res.json({ success: true, profile });
   } catch (err) {
     console.error('Error confirming fact:', err);
@@ -2276,7 +2280,7 @@ app.post('/api/profile/confirm-fact', requireAuth(), (req, res) => {
 });
 
 // Endpoint to remove a stored fact from a user's profile
-app.post('/api/profile/remove-fact', requireAuth(), (req, res) => {
+app.post('/api/profile/remove-fact', requireAuth(), async (req, res) => {
   try {
     const { userId: bodyUserId, key } = req.body || {};
     if (!bodyUserId || !key) return res.status(400).json({ error: 'userId and key are required' });
@@ -2286,12 +2290,12 @@ app.post('/api/profile/remove-fact', requireAuth(), (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const profile = getOrCreateProfile(bodyUserId);
+    const profile = await getOrCreateProfile(bodyUserId);
     profile.facts = profile.facts || {};
     if (profile.facts[key]) {
       const old = profile.facts[key];
       delete profile.facts[key];
-      profileStore.saveProfile(bodyUserId, profile);
+      await profileStore.saveProfile(bodyUserId, profile);
       // Telemetry: record deletion
       try { telemetryStore.appendEvent({ type: 'fact_deleted', userId: bodyUserId, key, oldValue: old.value || null }); } catch (e) { console.warn('Telemetry append failed', e.message || e); }
       return res.json({ success: true, profile });
@@ -2359,7 +2363,7 @@ app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
     const userId = req.account.userId;
 
     // Delete profile
-    profileStore.deleteProfile(userId);
+    await profileStore.deleteProfile(userId);
 
     // Delete conversations from Qdrant
     try {
@@ -2383,7 +2387,7 @@ app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
     }
 
     // Delete account
-    accountStore.deleteAccount(userId);
+    await accountStore.deleteAccount(userId);
 
     res.json({ success: true, message: 'All data deleted' });
   } catch (error) {
@@ -2398,7 +2402,7 @@ app.delete('/api/admin/gdpr/delete-all/:userId', requireAuth({ admin: true }), a
     const { userId } = req.params;
 
     // Delete profile
-    profileStore.deleteProfile(userId);
+    await profileStore.deleteProfile(userId);
 
     // Delete conversations from Qdrant
     try {
@@ -2422,11 +2426,11 @@ app.delete('/api/admin/gdpr/delete-all/:userId', requireAuth({ admin: true }), a
     }
 
     // Delete account
-    accountStore.deleteAccount(userId);
+    await accountStore.deleteAccount(userId);
 
     res.json({ success: true, message: `All data for user ${userId} deleted` });
   } catch (error) {
-    console.error(`GDPR deletion error for user ${req.params.userId}:`, error);
+    console.error(`GDPR deletion error for user ${userId}:`, error);
     res.status(500).json({ error: 'Deletion failed' });
   }
 });
@@ -2526,7 +2530,7 @@ app.get('/api/admin/gdpr/export/:userId', requireAuth({ admin: true }), async (r
     res.setHeader('Content-Disposition', `attachment; filename="aura-ai-data-${userId}.json"`);
     res.json(exportData);
   } catch (error) {
-    console.error(`GDPR export error for user ${req.params.userId}:`, error);
+    console.error(`GDPR export error for user ${userId}:`, error);
     res.status(500).json({ error: 'Export failed' });
   }
 });
