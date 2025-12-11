@@ -145,9 +145,15 @@ The system runs automatically on startup and every 30 minutes thereafter.
 
 4.  **Start services:**
     ```bash
+    # Start the services
     docker compose up -d --build webhook-api
+
+    # Restart the container
+    docker compose restart webhook-api
+
     # or locally for development:
     PORT=4002 node webhook-api/server.js
+
     # Start Deep Agent Sandbox (in a separate terminal)
     cd opencode
     docker compose up -d --build
