@@ -67,6 +67,23 @@ The system runs automatically on startup and every 30 minutes thereafter.
 - **GDPR compliance**: Basic privacy compliance with consent banner, privacy policy, and data export/deletion endpoints.
 - **Deep Agents**: Sandboxed code execution environment (`opencode`) controlled via SSH for performing complex tasks (e.g., calculation, file manipulation) triggered by `/agent` or `/deep` commands.
 
+## API Changes (2025-12-11) — Security hardening
+
+Security hardening: the following endpoints are now admin-only (intentional)
+POST /api/trigger-thought — External automation that previously posted here (e.g., n8n) must now authenticate as an admin/service account (headers: X-User-Id and X-Auth-Token).
+GET /api/thoughts/:userId — Legacy polling endpoint moved to admin-only. Migrate clients to WebSocket delivery or use admin credentials for tooling.
+GET /api/users — Listing all user profiles is now admin-only for privacy. Use admin credentials for authorized tooling.
+Restored self-service functionality for user-scoped endpoints:
+GET /api/users/:userId/profile — accessible to the user themselves or admins.
+GET /api/users/:userId/relationships — accessible to the user themselves or admins.
+Implementation notes & migration guidance:
+Integrators must include admin/service credentials in requests using the headers 'X-User-Id' and 'X-Auth-Token'. Create a dedicated service account via the API and add its userId to the ADMIN_USER_IDS environment variable or assign the admin role via the admin API.
+Legacy workflows using polling for thoughts should migrate to the WebSocket-based delivery mechanism to avoid needing admin credentials.
+GraphStore deletion is not implemented; admins should be aware GDPR deletion may not remove graph data until GraphStore exposes a delete API.
+Bug fixes and reliability:
+Profile and account stores refactored to async file I/O and server initialization now awaits asynchronous startup tasks to avoid race conditions.
+requireAuth middleware improved with error handling.
+
 ## Components
 
 - **PHP Frontend Server**: An Apache server running in Docker to serve the `index.html` file.
