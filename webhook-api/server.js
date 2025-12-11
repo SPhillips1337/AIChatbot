@@ -1060,7 +1060,7 @@ app.get('/health', (req, res) => {
 });
 
 // New endpoint to trigger a thought from an external service like N8N
-app.post('/api/trigger-thought', (req, res) => {
+app.post('/api/trigger-thought', requireAuth({ admin: true }), (req, res) => {
   const { message } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });
@@ -1192,7 +1192,7 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 // API endpoint for user profiles
-app.get('/api/users/:userId/profile', async (req, res) => {
+app.get('/api/users/:userId/profile', requireAuth({ admin: true }), async (req, res) => {
   const profile = await profileStore.getProfile(req.params.userId);
   if (profile) {
     res.json(profile);
@@ -1202,7 +1202,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 });
 
 // API endpoint for user relationships
-app.get('/api/users/:userId/relationships', requireAuth(), async (req, res) => {
+app.get('/api/users/:userId/relationships', requireAuth({ admin: true }), async (req, res) => {
   const { userId } = req.params;
   const { type } = req.query;
 
@@ -1227,7 +1227,7 @@ app.get('/api/users/:userId/relationships', requireAuth(), async (req, res) => {
 });
 
 // API endpoint for all user profiles
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', requireAuth({ admin: true }), async (req, res) => {
   const profiles = await profileStore.listProfiles();
   res.json(profiles);
 });
@@ -2164,7 +2164,7 @@ You form and evolve opinions based on news and user interactions.`
 });
 
 // Check for thoughts endpoint (legacy, can be replaced by WebSockets)
-app.get('/api/thoughts/:userId', (req, res) => {
+app.get('/api/thoughts/:userId', requireAuth({ admin: true }), (req, res) => {
   try {
     const { userId } = req.params;
 
@@ -2392,6 +2392,45 @@ app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
   }
 });
 
+// Admin-only GDPR Data Deletion endpoint for a specific user
+app.delete('/api/admin/gdpr/delete-all/:userId', requireAuth({ admin: true }), async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Delete profile
+    profileStore.deleteProfile(userId);
+
+    // Delete conversations from Qdrant
+    try {
+      await qdrant.delete(config.collectionName, {
+        filter: {
+          must: [{ key: 'userId', match: { value: userId } }]
+        }
+      });
+    } catch (error) {
+      console.warn(`Failed to delete conversations for user ${userId}:`, error.message);
+    }
+
+    // Delete from GraphStore if available
+    if (graphStore) {
+      try {
+        // Note: GraphStore doesn't have a delete method, would need to be implemented
+        console.warn('GraphStore deletion not implemented');
+      } catch (error) {
+        console.warn(`Failed to delete graph data for user ${userId}:`, error.message);
+      }
+    }
+
+    // Delete account
+    accountStore.deleteAccount(userId);
+
+    res.json({ success: true, message: `All data for user ${userId} deleted` });
+  } catch (error) {
+    console.error(`GDPR deletion error for user ${req.params.userId}:`, error);
+    res.status(500).json({ error: 'Deletion failed' });
+  }
+});
+
 // GDPR Data Export endpoint
 app.get('/api/gdpr/export', requireAuth(), async (req, res) => {
   try {
@@ -2438,6 +2477,56 @@ app.get('/api/gdpr/export', requireAuth(), async (req, res) => {
     res.json(exportData);
   } catch (error) {
     console.error('GDPR export error:', error);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// Admin-only GDPR Data Export endpoint for a specific user
+app.get('/api/admin/gdpr/export/:userId', requireAuth({ admin: true }), async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Get profile data
+    const profile = await profileStore.getProfile(userId);
+
+    // Get conversation history from Qdrant
+    let conversations = [];
+    try {
+      const searchResult = await qdrant.scroll(config.collectionName, {
+        filter: {
+          must: [{ key: 'userId', match: { value: userId } }]
+        },
+        limit: 1000,
+        with_payload: true
+      });
+      conversations = searchResult.points.map(point => point.payload);
+    } catch (error) {
+      console.warn(`Failed to export conversations for user ${userId}:`, error.message);
+    }
+
+    // Get GraphStore data if available
+    let graphData = null;
+    if (graphStore) {
+      try {
+        graphData = await graphStore.getUserContext(userId);
+      } catch (error) {
+        console.warn(`Failed to export graph data for user ${userId}:`, error.message);
+      }
+    }
+
+    const exportData = {
+      userId,
+      exportDate: new Date().toISOString(),
+      profile,
+      conversations,
+      graphData
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="aura-ai-data-${userId}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    console.error(`GDPR export error for user ${req.params.userId}:`, error);
     res.status(500).json({ error: 'Export failed' });
   }
 });
