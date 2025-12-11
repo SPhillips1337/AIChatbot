@@ -3,7 +3,6 @@ const { Client } = require('ssh2');
 class DeepAgentService {
     constructor() {
         this.config = {
-        this.config = {
             host: process.env.OPENCODE_HOST || 'host.docker.internal',
             port: process.env.OPENCODE_PORT || 2222,
             username: process.env.OPENCODE_USER || 'opencodeuser',
@@ -117,10 +116,6 @@ class DeepAgentService {
                 });
             }).catch(reject);
         });
-    }
-        cmd += ` && rm /var/www/html/${filename}`;
-
-        return this.executeCommand(cmd);
     }
 
     getExtension(lang) {

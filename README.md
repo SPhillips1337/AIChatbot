@@ -123,22 +123,55 @@ requireAuth middleware improved with error handling.
 - An embeddings endpoint (set `EMBEDDING_URL`)
 - A QDRANT server - either local or cloud instance (set `QDRANT_URL` and `QDRANT_API_KEY`)
 
-### Environment variables (notable)
-- `LLM_URL` - Base URL for LLM completion calls
-- `EMBEDDING_URL` - Base URL for embedding calls (required for embedding-backed matcher in production)
+### Environment variables (complete list)
+
+#### Core Configuration
+- `LLM_URL` - Base URL for LLM completion calls (e.g., http://localhost:8080)
+- `LLM_MODEL` - Model name for LLM requests (default: qwen2.5:7b-instruct-q4_K_M)
+- `EMBEDDING_URL` - Base URL for embedding calls (required for embedding-backed matcher)
+- `EMBEDDING_MODEL` - Model name for embedding requests (default: bge-m3:latest)
 - `QDRANT_URL` - Qdrant endpoint (local: http://localhost:6333 or cloud: https://your-cluster.region.aws.cloud.qdrant.io)
 - `QDRANT_API_KEY` - API key for Qdrant cloud instances (not needed for local)
+- `PORT` - Server port (default: 3000)
+- `DEV_MOCK` - If `true` returns canned embeddings/responses for local testing
+
+#### Security & Admin
+- `ADMIN_USER_IDS` - Comma-separated list of user IDs with admin privileges
+- `OPENCODE_PASSWORD` - Required password for Deep Agent SSH access
+
+#### Deep Agent / Code Sandbox
+- `OPENCODE_HOST` - SSH host for code sandbox (default: host.docker.internal)
+- `OPENCODE_PORT` - SSH port for code sandbox (default: 2222)
+- `OPENCODE_USER` - SSH username for code sandbox (default: opencodeuser)
+- `OPENCODE_PASSWORD` - SSH password for code sandbox (required for security)
+
+#### Graph Database (Optional)
 - `NEO4J_URI` - Neo4j database URI (optional, e.g., bolt://localhost:7687)
 - `NEO4J_USER` - Neo4j username (optional)
 - `NEO4J_PASSWORD` - Neo4j password (optional)
-- `PORT` - Server port
-- `DEV_MOCK` - If `true` returns canned embeddings/responses for local testing
-- Note: If you edit `webhook-api/fact_definitions.js`, restart the webhook-api server to refresh preloaded example embeddings.
-- Telemetry retention: `webhook-api/telemetry.json` stores up to 10,000 recent events (see `webhook-api/telemetryStore.js`).
+
+#### Timing Configuration (milliseconds)
+- `IDLE_TIMEOUT_MS` - User inactivity before proactive thoughts (default: 600000 = 10 min)
+- `PROACTIVE_CHECKIN_MS` - Time after initial thought to check-in (default: 300000 = 5 min)
+- `PROACTIVE_QUIET_MS` - Time after check-in before going quiet (default: 120000 = 2 min)
+
+#### Fact Extraction & Learning
 - `PARAPHRASE_QUESTIONS` - If `true` LLM paraphrases discovery templates before asking
-- `ASK_COOLDOWN_MS` - Milliseconds to wait before re-asking the same fact (default 7 days)
-- `EMBED_AUTO_SAVE_SIM` - Embedding similarity threshold to auto-save (default 0.90)
-- `EMBED_CONFIRM_SIM` - Embedding similarity threshold to prompt for confirmation (default 0.78)
+- `ASK_COOLDOWN_MS` - Milliseconds to wait before re-asking the same fact (default: 604800000 = 7 days)
+- `EMBED_AUTO_SAVE_SIM` - Embedding similarity threshold to auto-save (default: 0.90)
+- `EMBED_CONFIRM_SIM` - Embedding similarity threshold to prompt for confirmation (default: 0.78)
+- `EMBED_SIMILARITY_THRESHOLD` - General embedding similarity threshold (default: 0.78)
+
+#### External Input System
+- `TWITTER_API_KEY` - Twitter API key (optional)
+- `TWITTER_API_SECRET` - Twitter API secret (optional)
+- `TWITTER_ACCESS_TOKEN` - Twitter access token (optional)
+- `TWITTER_ACCESS_SECRET` - Twitter access secret (optional)
+- `X_CLIENT_ID` - X/Twitter OAuth2 client ID (optional)
+- `X_CLIENT_SECRET` - X/Twitter OAuth2 client secret (optional)
+- `X_REDIRECT_URI` - OAuth2 redirect URI (default: http://localhost)
+- `PERPLEXICA_URL` - Perplexica search API URL (optional, e.g., http://localhost:3000/api/search)
+- `SEARXNG_URL` - SearxNG search engine URL (optional, e.g., http://localhost:8080)
 
 ### Installation
 
