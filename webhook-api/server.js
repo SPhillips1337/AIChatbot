@@ -122,7 +122,7 @@ function requireAuth(options = {}) {
       req.account = account;
       next();
     } catch (error) {
-      console.error('Authentication error:', error);
+      console.error('Authentication error:', error.message);
       res.status(500).json({ error: 'Internal server error' });
     }
   };
@@ -2382,7 +2382,7 @@ app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
     // Delete from GraphStore if available
     if (graphStore) {
       try {
-        // Note: GraphStore doesn't have a delete method, would need to be implemented
+        // TODO: Implement user deletion in GraphStore. This is a known limitation.
         console.warn('GraphStore deletion not implemented');
       } catch (error) {
         console.warn('Failed to delete graph data:', error.message);
@@ -2422,7 +2422,7 @@ app.delete('/api/admin/gdpr/delete-all/:userId', requireAuth({ admin: true }), a
     // Delete from GraphStore if available
     if (graphStore) {
       try {
-        // Note: GraphStore doesn't have a delete method, would need to be implemented
+        // TODO: Implement user deletion in GraphStore. This is a known limitation.
         console.warn('GraphStore deletion not implemented');
       } catch (error) {
         console.warn(`Failed to delete graph data for user ${userId}:`, error.message);
