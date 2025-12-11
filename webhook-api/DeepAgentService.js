@@ -3,7 +3,7 @@ const { Client } = require('ssh2');
 class DeepAgentService {
     constructor() {
         this.config = {
-            host: process.env.OPENCODE_HOST || 'localhost',
+            host: process.env.OPENCODE_HOST || 'host.docker.internal',
             port: process.env.OPENCODE_PORT || 2222,
             username: process.env.OPENCODE_USER || 'opencodeuser',
             password: process.env.OPENCODE_PASSWORD || 'opencodepass',
@@ -17,10 +17,15 @@ class DeepAgentService {
     async connect() {
         return new Promise((resolve, reject) => {
             const conn = new Client();
+            
+            console.log(`Attempting SSH connection to ${this.config.host}:${this.config.port} as ${this.config.username}`);
+            
             conn.on('ready', () => {
+                console.log('SSH connection established successfully');
                 resolve(conn);
             }).on('error', (err) => {
-                reject(err);
+                console.error('SSH connection error:', err.message);
+                reject(new Error(`SSH connection failed: ${err.message}`));
             }).connect(this.config);
         });
     }
