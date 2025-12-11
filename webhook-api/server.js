@@ -84,11 +84,6 @@ const ADMIN_USER_IDS = new Set([
   ...(process.env.ADMIN_USER_IDS ? process.env.ADMIN_USER_IDS.split(',').map(id => id.trim()) : [])
 ].filter(Boolean));
 
-(async () => {
-  for (const id of ADMIN_USER_IDS) {
-    await accountStore.assignRoleByUserId(id, 'admin');
-  }
-})();
 
 async function ensureAccountRole(account) {
   if (!account) return 'user';
@@ -116,15 +111,20 @@ async function authenticateRequest(req) {
 function requireAuth(options = {}) {
   const { admin = false } = options;
   return async (req, res, next) => {
-    const account = await authenticateRequest(req);
-    if (!account) {
-      return res.status(401).json({ error: 'Not authenticated' });
+    try {
+      const account = await authenticateRequest(req);
+      if (!account) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+      if (admin && account.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin privileges required' });
+      }
+      req.account = account;
+      next();
+    } catch (error) {
+      console.error('Authentication error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-    if (admin && account.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin privileges required' });
-    }
-    req.account = account;
-    next();
   };
 }
 // Inject dependencies
@@ -1196,7 +1196,10 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 // API endpoint for user profiles
-app.get('/api/users/:userId/profile', requireAuth({ admin: true }), async (req, res) => {
+app.get('/api/users/:userId/profile', requireAuth(), async (req, res) => {
+  if (req.account.userId !== req.params.userId && req.account.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const profile = await profileStore.getProfile(req.params.userId);
   if (profile) {
     res.json(profile);
@@ -1206,7 +1209,7 @@ app.get('/api/users/:userId/profile', requireAuth({ admin: true }), async (req, 
 });
 
 // API endpoint for user relationships
-app.get('/api/users/:userId/relationships', requireAuth({ admin: true }), async (req, res) => {
+app.get('/api/users/:userId/relationships', requireAuth(), async (req, res) => {
   const { userId } = req.params;
   const { type } = req.query;
 
@@ -2552,9 +2555,12 @@ app.use('/static', express.static(path.join(__dirname, '..')));
 // Also expose static assets under /admin/static (if dashboard references local assets)
 app.use('/admin/static', express.static(path.join(__dirname, '..')));
 
-// Start the server
-server.listen(config.port, async () => {
-  console.log(`Webhook API server with WebSocket support running on port ${config.port}`);
+async function initialize() {
+  // Assign admin roles
+  for (const id of ADMIN_USER_IDS) {
+    await accountStore.assignRoleByUserId(id, 'admin');
+  }
+
   // Initialize QDRANT collection
   await initializeCollection();
 
@@ -2586,10 +2592,13 @@ server.listen(config.port, async () => {
     console.log('Processing external inputs...');
     await externalInput.processAll();
   }, 30 * 60 * 1000);
+}
 
-  // Per-user proactive timers are used now; do not start global proactive thoughts on boot.
-  // Individual user idle timers start when a WS client connects or authenticates.
-  // startProactiveThoughts(); (disabled)
+// Start the server after initialization
+initialize().then(() => {
+  server.listen(config.port, () => {
+    console.log(`Webhook API server with WebSocket support running on port ${config.port}`);
+  });
 });
 
 // Graceful shutdown
