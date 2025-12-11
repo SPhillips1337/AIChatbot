@@ -1472,7 +1472,11 @@
 
             speechSynthesis.cancel();
 
-            const utterance = new SpeechSynthesisUtterance(text);
+            // Clean text for more natural speech
+            const cleanText = cleanTextForSpeech(text);
+            if (!cleanText.trim()) return;
+
+            const utterance = new SpeechSynthesisUtterance(cleanText);
             utterance.rate = voiceSettings.speed;
             utterance.pitch = 1.0;
             utterance.volume = 1.0;
@@ -1487,6 +1491,24 @@
             }
 
             speechSynthesis.speak(utterance);
+        }
+
+        // Clean text for natural speech synthesis
+        function cleanTextForSpeech(text) {
+            return text
+                // Remove emojis (Unicode ranges for most emojis)
+                .replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
+                // Remove other common symbols and special characters
+                .replace(/[🎤🔊🔇📝📊😊📰🌓🔐👤]/g, '')
+                // Remove markdown-style formatting
+                .replace(/\*\*(.*?)\*\*/g, '$1')  // **bold**
+                .replace(/\*(.*?)\*/g, '$1')      // *italic*
+                // Remove code blocks for speech (keep content but remove markers)
+                .replace(/```[\s\S]*?```/g, ' code block ')
+                .replace(/`([^`]+)`/g, '$1')      // inline code
+                // Clean up multiple spaces and trim
+                .replace(/\s+/g, ' ')
+                .trim();
         }
 
         // Add speak button to messages
