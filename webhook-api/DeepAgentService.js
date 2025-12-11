@@ -3,11 +3,17 @@ const { Client } = require('ssh2');
 class DeepAgentService {
     constructor() {
         this.config = {
+        this.config = {
             host: process.env.OPENCODE_HOST || 'host.docker.internal',
             port: process.env.OPENCODE_PORT || 2222,
             username: process.env.OPENCODE_USER || 'opencodeuser',
-            password: process.env.OPENCODE_PASSWORD || 'opencodepass',
+            password: process.env.OPENCODE_PASSWORD,
         };
+
+        // Validate required credentials
+        if (!this.config.password) {
+            throw new Error('OPENCODE_PASSWORD environment variable is required for security');
+        }
     }
 
     /**
