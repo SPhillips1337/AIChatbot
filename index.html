@@ -957,7 +957,21 @@
                             const data = JSON.parse(event.data);
 
                             if (data.type === 'proactive_message' && data.message) {
-                                addMessage('AI', data.message);
+                                // Check if this is an idle timeout message
+                                const isIdleMessage = data.message.includes('still here') || 
+                                                    data.message.includes('wait for you') ||
+                                                    data.message.includes('take your time');
+                                
+                                if (isIdleMessage && isTTSActive()) {
+                                    // Delay idle messages when TTS is active
+                                    setTimeout(() => {
+                                        if (!isTTSActive()) {
+                                            addMessage('AI', data.message);
+                                        }
+                                    }, 3000);
+                                } else {
+                                    addMessage('AI', data.message);
+                                }
                                 return;
                             }
 
@@ -1037,6 +1051,13 @@
             async function sendMessage() {
                 const message = messageInput.value.trim();
                 if (!message) return;
+
+                // Clear speech queue when user actively engages
+                speechQueue = [];
+                if (speechSynthesis.speaking) {
+                    speechSynthesis.cancel();
+                }
+                isSpeaking = false;
 
                 addMessage(displayName || 'You', message);
                 messageInput.value = '';
@@ -1398,6 +1419,55 @@
             autoRead: false
         };
 
+        // TTS Queue System
+        let speechQueue = [];
+        let isSpeaking = false;
+
+        function addToSpeechQueue(text, priority = false) {
+            const cleanText = cleanTextForSpeech(text);
+            if (!cleanText.trim()) return;
+
+            if (priority) {
+                speechQueue.unshift(cleanText);
+            } else {
+                speechQueue.push(cleanText);
+            }
+            
+            processSpeechQueue();
+        }
+
+        function processSpeechQueue() {
+            if (isSpeaking || speechQueue.length === 0 || !voiceSettings.autoRead) return;
+
+            isSpeaking = true;
+            const text = speechQueue.shift();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = voiceSettings.speed;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            if (voiceSettings.aiVoice) {
+                const voices = speechSynthesis.getVoices();
+                const selectedVoice = voices.find(v => v.voiceURI === voiceSettings.aiVoice);
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                }
+            }
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                setTimeout(processSpeechQueue, 500); // Brief pause between messages
+            };
+
+            utterance.onerror = () => {
+                isSpeaking = false;
+                processSpeechQueue();
+            };
+
+            speechSynthesis.speak(utterance);
+        }
+
         function loadVoiceSettings() {
             const saved = localStorage.getItem('voiceSettings');
             if (saved) {
@@ -1467,32 +1537,42 @@
             });
         }
 
-        // Enhanced speakText function with settings
+        // Enhanced speakText function with queue system
         function speakText(text, autoRead = false) {
             if (!text || !window.speechSynthesis) return;
-            if (autoRead && !voiceSettings.autoRead) return;
 
-            speechSynthesis.cancel();
+            if (autoRead) {
+                // Add to queue for auto-read
+                addToSpeechQueue(text);
+            } else {
+                // Manual speech - stop queue and speak immediately
+                speechSynthesis.cancel();
+                speechQueue = [];
+                isSpeaking = false;
+                
+                const cleanText = cleanTextForSpeech(text);
+                if (!cleanText.trim()) return;
 
-            // Clean text for more natural speech
-            const cleanText = cleanTextForSpeech(text);
-            if (!cleanText.trim()) return;
+                const utterance = new SpeechSynthesisUtterance(cleanText);
+                utterance.rate = voiceSettings.speed;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
 
-            const utterance = new SpeechSynthesisUtterance(cleanText);
-            utterance.rate = voiceSettings.speed;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-
-            // Use selected voice
-            if (voiceSettings.aiVoice) {
-                const voices = speechSynthesis.getVoices();
-                const selectedVoice = voices.find(v => v.voiceURI === voiceSettings.aiVoice);
-                if (selectedVoice) {
-                    utterance.voice = selectedVoice;
+                if (voiceSettings.aiVoice) {
+                    const voices = speechSynthesis.getVoices();
+                    const selectedVoice = voices.find(v => v.voiceURI === voiceSettings.aiVoice);
+                    if (selectedVoice) {
+                        utterance.voice = selectedVoice;
+                    }
                 }
-            }
 
-            speechSynthesis.speak(utterance);
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Check if TTS is currently active
+        function isTTSActive() {
+            return speechSynthesis.speaking || isSpeaking || speechQueue.length > 0;
         }
 
         // Clean text for natural speech synthesis
