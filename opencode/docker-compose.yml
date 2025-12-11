@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "2222:22"
+    volumes:
+      - ./opencode_data/php:/var/www/html:ro

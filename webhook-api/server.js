@@ -20,12 +20,15 @@ const { QdrantClient } = require('@qdrant/js-client-rest');
 const ExternalInputManager = require('./external-input');
 const accountStore = require('./accountStore');
 const rateLimit = require('./rateLimiter');
+const deepAgent = require('./DeepAgentService');
 
 // Configuration
 const config = {
   port: process.env.PORT || 3000,
   llmUrl: process.env.LLM_URL || 'http://localhost:8080',
+  llmModel: process.env.LLM_MODEL || 'qwen2.5:7b-instruct-q4_K_M',
   embeddingUrl: process.env.EMBEDDING_URL || 'http://localhost:8081',
+  embeddingModel: process.env.EMBEDDING_MODEL || 'bge-m3:latest',
   qdrantUrl: process.env.QDRANT_URL || 'http://192.168.1.2:6333',
   qdrantApiKey: process.env.QDRANT_API_KEY,
   thoughtsDir: path.join(__dirname, 'thoughts'),
@@ -157,7 +160,7 @@ let idleTimeout = null;
 // Generate a proactive thought using LLM
 function ensureTimeConsistency(message, correctTimeOfDay) {
   if (!message) return message;
-  
+
   // Define conflicting time references
   const timeReferences = {
     morning: ['morning', 'dawn', 'sunrise', 'early'],
@@ -165,9 +168,9 @@ function ensureTimeConsistency(message, correctTimeOfDay) {
     evening: ['evening', 'dusk', 'sunset', 'twilight'],
     night: ['night', 'midnight', 'late night', 'nighttime']
   };
-  
+
   let cleanedMessage = message;
-  
+
   // Remove conflicting time references
   Object.keys(timeReferences).forEach(timeKey => {
     if (timeKey !== correctTimeOfDay) {
@@ -177,7 +180,7 @@ function ensureTimeConsistency(message, correctTimeOfDay) {
       });
     }
   });
-  
+
   // Remove specific conflicting phrases
   const conflictingPhrases = [
     'late afternoon light',
@@ -187,25 +190,25 @@ function ensureTimeConsistency(message, correctTimeOfDay) {
     'dawn breaking',
     'sunset colors'
   ];
-  
+
   conflictingPhrases.forEach(phrase => {
     const regex = new RegExp(phrase, 'gi');
     cleanedMessage = cleanedMessage.replace(regex, `${correctTimeOfDay} atmosphere`);
   });
-  
+
   return cleanedMessage;
 }
 
 // Helper functions for message deduplication
 function isMessageSimilar(newMessage, recentMessages) {
   if (!newMessage || !recentMessages || recentMessages.length === 0) return false;
-  
+
   const newWords = newMessage.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  
+
   for (const recent of recentMessages) {
     const recentWords = recent.toLowerCase().split(/\s+/).filter(w => w.length > 3);
     const commonWords = newWords.filter(w => recentWords.includes(w));
-    
+
     // If more than 40% of significant words are common, consider it similar
     if (commonWords.length / Math.max(newWords.length, 1) > 0.4) {
       return true;
@@ -218,9 +221,9 @@ function addToRecentMessages(userState, message) {
   if (!userState.recentProactiveMessages) {
     userState.recentProactiveMessages = [];
   }
-  
+
   userState.recentProactiveMessages.push(message);
-  
+
   // Keep only last 5 messages to prevent memory bloat
   if (userState.recentProactiveMessages.length > 5) {
     userState.recentProactiveMessages.shift();
@@ -277,10 +280,10 @@ async function generateProactiveThought(userId = null) {
 
     const response = await generateResponse(messages);
     let thought = response || `I've been thinking about how fascinating conversations can be...`;
-    
+
     // Post-process to ensure time consistency
     thought = ensureTimeConsistency(thought, timeOfDay);
-    
+
     // Check for similarity and add to recent messages
     if (!isMessageSimilar(thought, recentMessages)) {
       if (userState) addToRecentMessages(userState, thought);
@@ -306,7 +309,7 @@ async function generateProactiveThought(userId = null) {
     else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
     else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
     else timeOfDay = 'night';
-    
+
     return `I've been thinking about how fascinating conversations can be this ${timeOfDay}...`;
   }
 }
@@ -428,14 +431,14 @@ function makeAnonId() {
 function getOrCreateUserState(key, ws = null) {
   if (!key) return null;
   if (!userStates.has(key)) {
-    userStates.set(key, { 
-      idleTimeout: null, 
-      proactiveTimeout: null, 
-      waitingForResponse: false, 
-      checkInSent: false, 
-      isQuiet: false, 
-      lastMessage: null, 
-      ws: ws || null, 
+    userStates.set(key, {
+      idleTimeout: null,
+      proactiveTimeout: null,
+      waitingForResponse: false,
+      checkInSent: false,
+      isQuiet: false,
+      lastMessage: null,
+      ws: ws || null,
       greeted: false,
       recentProactiveMessages: [] // Track recent messages to prevent repetition
     });
@@ -518,7 +521,7 @@ async function sendInitialThoughtFor(key) {
 function sendCheckInFor(key) {
   const state = userStates.get(key);
   if (!state) return;
-  
+
   // Get current time context
   const now = new Date();
   const hour = now.getUTCHours();
@@ -527,7 +530,7 @@ function sendCheckInFor(key) {
   else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
   else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
   else timeOfDay = 'night';
-  
+
   console.log('Sending check-in to', key);
   const checkInMessage = `Are you still there? No worries if you're busy this ${timeOfDay} - I'll wait quietly until you're ready to chat.`;
   const ws = state.ws;
@@ -548,13 +551,13 @@ function sendCheckInFor(key) {
         ws.send(JSON.stringify({ sender: 'AI', type: 'proactive_message', message: quietMessage, timestamp: new Date().toISOString() }));
       }
       stopProactiveThoughtsFor(key);
-      
+
       // Clear idle timeout to prevent restarting proactive thoughts
       if (state.idleTimeout) {
         clearTimeout(state.idleTimeout);
         state.idleTimeout = null;
       }
-      
+
       // Mark as quiet to prevent further proactive engagement
       state.isQuiet = true;
     }
@@ -635,11 +638,11 @@ wss.on('connection', (ws) => {
               checkInSent: oldState.checkInSent,
               lastMessage: oldState.lastMessage
             } : {};
-            
+
             stopProactiveThoughtsFor(oldClientId);
             userStates.delete(oldClientId);
             console.log('Cleaned up anonymous state for', oldClientId);
-            
+
             // Create new state with preserved conversation state
             ws.userId = data.userId;
             ws._clientId = data.userId; // Update client ID to match user ID
@@ -686,11 +689,11 @@ wss.on('connection', (ws) => {
               checkInSent: oldState.checkInSent,
               lastMessage: oldState.lastMessage
             } : {};
-            
+
             stopProactiveThoughtsFor(oldClientId);
             userStates.delete(oldClientId);
             console.log('Cleaned up anonymous state for', oldClientId);
-            
+
             // Allow anonymous bind without token (best-effort)
             ws.userId = data.userId;
             ws._clientId = data.userId; // Update client ID to match user ID
@@ -837,7 +840,7 @@ async function generateEmbeddings(text) {
 
     const apiUrl = `${config.embeddingUrl.replace(/\/$/, '')}/v1/embeddings`;
     const requestBody = {
-      model: "bge-m3:latest",
+      model: config.embeddingModel,
       input: text
     };
 
@@ -949,6 +952,19 @@ function fixEmbeddingSize(embedding, targetSize) {
 // Generate response from LLM
 async function generateResponse(messages) {
   try {
+    // Deep Agent Interception
+    const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : null;
+    if (lastMessage && lastMessage.role === 'user' && (lastMessage.content.startsWith('/agent') || lastMessage.content.startsWith('/deep'))) {
+      console.log('Deep Agent triggered:', lastMessage.content);
+      const task = lastMessage.content.replace(/^\/(agent|deep)\s*/, '');
+      try {
+        return await deepAgent.agenticLoop(task);
+      } catch (err) {
+        console.error('Deep Agent failed:', err);
+        return `Deep Agent encountered an error: ${err.message}`;
+      }
+    }
+
     // Development mock mode: return a canned, friendly reply for local testing
     if (devMock) {
       let lastUser = null;
@@ -965,8 +981,7 @@ async function generateResponse(messages) {
     const apiUrl = `${config.llmUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
     const requestBody = {
-      model: "qwen2.5:7b-instruct-q4_K_M", // Use the specified Ollama model
-      //model: "ikiru/Dolphin-Mistral-24B-Venice-Edition:latest", // Use the specified Ollama model
+      model: config.llmModel, // Use the specified Ollama model
       messages: messages, // Use the full message history
       temperature: 0.7,
       max_tokens: 500,
@@ -2342,10 +2357,10 @@ app.get('/api/admin/telemetry', requireAuth({ admin: true }), (req, res) => {
 app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
   try {
     const userId = req.account.userId;
-    
+
     // Delete profile
     profileStore.deleteProfile(userId);
-    
+
     // Delete conversations from Qdrant
     try {
       await qdrant.delete(config.collectionName, {
@@ -2381,10 +2396,10 @@ app.delete('/api/gdpr/delete-all', requireAuth(), async (req, res) => {
 app.get('/api/gdpr/export', requireAuth(), async (req, res) => {
   try {
     const userId = req.account.userId;
-    
+
     // Get profile data
     const profile = await profileStore.getProfile(userId);
-    
+
     // Get conversation history from Qdrant
     let conversations = [];
     try {
@@ -2487,7 +2502,7 @@ server.listen(config.port, async () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
-  
+
   // Close GraphStore connection
   if (graphStore) {
     try {
@@ -2497,7 +2512,7 @@ process.on('SIGINT', async () => {
       console.warn('Error closing GraphStore:', error.message);
     }
   }
-  
+
   // Close WebSocket server
   wss.close(() => {
     console.log('WebSocket server closed');
