@@ -70,29 +70,54 @@ class DeepAgentService {
             throw err;
         }
     }
-
-    /**
-     * Runs code in the sandbox by writing it to a file and executing it
-     * @param {string} code 
-     * @param {string} language (php, python, node)
-     */
     async runCode(code, language = 'php') {
         const filename = `task_${Date.now()}.${this.getExtension(language)}`;
-        // Escape single quotes for echo command
-        const safeCode = code.replace(/'/g, "'\\''");
-
-        // Command to write file and execute
-        let cmd = `echo '${safeCode}' > /var/www/html/${filename} && `;
-
+        
+        // Use proper file writing instead of echo to prevent injection
+        const tempFile = `/tmp/${filename}`;
+        
+        let cmd;
         switch (language.toLowerCase()) {
-            case 'php': cmd += `php /var/www/html/${filename}`; break;
-            case 'python': cmd += `python3 /var/www/html/${filename}`; break;
-            case 'node': case 'javascript': cmd += `node /var/www/html/${filename}`; break;
-            case 'bash': case 'sh': cmd += `bash /var/www/html/${filename}`; break;
+            case 'php': cmd = `php ${tempFile}`; break;
+            case 'python': cmd = `python3 ${tempFile}`; break;
+            case 'node': case 'javascript': cmd = `node ${tempFile}`; break;
+            case 'bash': case 'sh': cmd = `bash ${tempFile}`; break;
             default: throw new Error(`Unsupported language: ${language}`);
         }
 
-        // Cleanup file matches 
+        return new Promise((resolve, reject) => {
+            this.connect().then(conn => {
+                // First write the file using SFTP
+                conn.sftp((err, sftp) => {
+                    if (err) return reject(err);
+                    
+                    sftp.writeFile(tempFile, code, (err) => {
+                        if (err) return reject(err);
+                        
+                        // Then execute it
+                        conn.exec(`${cmd} && rm ${tempFile}`, (err, stream) => {
+                            if (err) return reject(err);
+                            
+                            let stdout = '';
+                            let stderr = '';
+                            stream.on('close', (code, signal) => {
+                                conn.end();
+                                if (code !== 0) {
+                                    reject(new Error(`Command failed with code ${code}: ${stderr || stdout}`));
+                                } else {
+                                    resolve(stdout);
+                                }
+                            }).on('data', (data) => {
+                                stdout += data;
+                            }).stderr.on('data', (data) => {
+                                stderr += data;
+                            });
+                        });
+                    });
+                });
+            }).catch(reject);
+        });
+    }
         cmd += ` && rm /var/www/html/${filename}`;
 
         return this.executeCommand(cmd);
