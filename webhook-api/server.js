@@ -20,6 +20,7 @@ const { QdrantClient } = require('@qdrant/js-client-rest');
 const ExternalInputManager = require('./external-input');
 const accountStore = require('./accountStore');
 const rateLimit = require('./rateLimiter');
+const countryBlocker = require('./countryBlocker');
 const deepAgent = require('./DeepAgentService');
 
 // Configuration
@@ -143,6 +144,7 @@ const server = http.createServer(app);
 
 // Middleware
 app.use(cors());
+app.use(countryBlocker.middleware());
 app.use(bodyParser.json());
 
 // Log requests in debug mode

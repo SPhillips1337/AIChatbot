@@ -1080,6 +1080,13 @@
 
                     if (!response.ok) {
                         const errorData = await response.json();
+                        
+                        // Handle country blocking
+                        if (response.status === 403 && errorData.message?.includes('region')) {
+                            addMessage('System', 'This service is not available in your region. We apologize for any inconvenience.');
+                            return;
+                        }
+                        
                         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
                     }
 
