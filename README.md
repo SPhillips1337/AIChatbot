@@ -46,6 +46,7 @@ The system runs automatically on startup and every 30 minutes thereafter.
 
 ## Key Additions (recent)
 
+- **AI Persona System**: Choose from 5 distinct AI personalities (AURA, Sunny, Logic, Muse, Sage) with unique speaking styles and traits. Access via 🎭 Persona menu.
 - Definition-driven structured fact extraction (`webhook-api/fact_definitions.js`).
 - Embedding-backed semantic matcher (`webhook-api/embeddingMatcher.js`) to handle paraphrases and improve recall.
 - Inline, non-modal confirmation flow for mid-confidence facts (WebSocket-driven) and a `POST /api/profile/confirm-fact` endpoint to accept/reject facts.
@@ -83,6 +84,26 @@ GraphStore deletion is not implemented; admins should be aware GDPR deletion may
 Bug fixes and reliability:
 Profile and account stores refactored to async file I/O and server initialization now awaits asynchronous startup tasks to avoid race conditions.
 requireAuth middleware improved with error handling.
+
+## AI Persona System
+
+AURA.ai now features 5 distinct AI personalities that users can switch between:
+
+- **AURA** (default): Balanced, thoughtful, and curious - speaks in a measured way
+- **Sunny**: Incredibly upbeat and optimistic - uses lots of exclamation points and positive language like "That's amazing!"
+- **Logic**: Precise and analytical - mentions statistics, probabilities, and systematic frameworks
+- **Muse**: Wildly creative and imaginative - uses metaphors, artistic references, and poetic language
+- **Sage**: Ancient and wise - references wisdom from different cultures and asks profound questions
+
+### Usage
+- Access via the 🎭 Persona menu item
+- Personas affect all AI responses (chat, proactive thoughts, discovery questions)
+- Selection is saved to user profile and persists across sessions
+- Each persona has distinct speaking styles and personality traits
+
+### API Endpoints
+- `GET /api/personas` - List all available personas
+- `POST /api/personas/set` - Set user's selected persona (requires auth)
 
 ## Components
 
@@ -273,6 +294,7 @@ AIChatbot/
 ├── privacy-policy.html        # GDPR privacy policy
 ├── webhook-api/               # Node.js backend
 │   ├── server.js              # Main API and WebSocket server
+│   ├── personas.js            # AI persona definitions and management
 │   ├── embeddingMatcher.js    # Embedding-backed semantic matcher
 │   ├── fact_definitions.js    # Structured fact definitions and examples
 │   ├── graphStore.js          # Neo4j graph database integration (optional)
