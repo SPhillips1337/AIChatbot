@@ -304,6 +304,38 @@
             opacity: 0.85;
         }
 
+        .persona-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 8px 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: white;
+        }
+
+        .persona-card:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+        }
+
+        .persona-card.selected {
+            border-color: #007bff;
+            background: #f8f9ff;
+        }
+
+        .persona-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 4px;
+            color: #333;
+        }
+
+        .persona-description {
+            color: #666;
+            font-size: 0.9em;
+        }
+
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -605,6 +637,7 @@
         <button id="menuToggle" class="menu-toggle" aria-label="Toggle menu">☰</button>
         <div class="menu-links" id="menuLinks">
             <a id="profileLink" href="#">👤 Profile</a>
+            <a id="personaLink" href="#">🎭 Persona</a>
             <a href="#" onclick="showVoiceSettings()">🎙️ Voice Settings</a>
             <a href="#" onclick="showFeedbackForm()">📝 Feedback</a>
             <a id="dashboardLink" href="#" target="_blank" data-admin-only>📊 Dashboard</a>
@@ -642,6 +675,16 @@
             <small class="password-hint hidden" id="password-hint">Password must be at least 6 characters.</small>
             <button id="auth-submit">Continue</button>
             <p class="auth-error hidden" id="auth-error"></p>
+        </div>
+    </div>
+
+    <div id="persona-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Choose Your AI Persona</h2>
+            <div id="persona-list">Loading...</div>
+            <div style="margin-top:12px; text-align:right;">
+                <button id="close-persona">Close</button>
+            </div>
         </div>
     </div>
 
@@ -853,6 +896,18 @@
                         token: authToken
                     });
                     window.open(`${API_BASE}/admin?${params.toString()}`, '_blank');
+                });
+            }
+
+            const personaLink = document.getElementById('personaLink');
+            if (personaLink) {
+                personaLink.addEventListener('click', async (ev) => {
+                    ev.preventDefault();
+                    if (!userId) {
+                        alert('Please log in to change your persona.');
+                        return;
+                    }
+                    openPersonaModal();
                 });
             }
 
@@ -1712,6 +1767,88 @@
             LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
         }
 
+        // Persona modal functions
+        async function openPersonaModal() {
+            const modal = document.getElementById('persona-modal');
+            const content = document.getElementById('persona-list');
+            modal.classList.remove('hidden');
+            content.innerHTML = 'Loading...';
+            
+            try {
+                const [personasResp, profileResp] = await Promise.all([
+                    fetch(`${API_BASE}/api/personas`),
+                    fetch(`${API_BASE}/api/users/${userId}/profile`, { 
+                        headers: { 'X-User-Id': userId, 'X-Auth-Token': authToken || '' } 
+                    })
+                ]);
+                
+                if (!personasResp.ok) throw new Error('Failed to load personas');
+                
+                const personas = await personasResp.json();
+                const profile = profileResp.ok ? await profileResp.json() : {};
+                const currentPersona = profile.selectedPersona || 'default';
+                
+                renderPersonas(personas, currentPersona);
+            } catch (e) {
+                content.innerHTML = 'Failed to load personas.';
+            }
+        }
+
+        function closePersonaModal() {
+            const modal = document.getElementById('persona-modal');
+            modal.classList.add('hidden');
+        }
+
+        function renderPersonas(personas, currentPersona) {
+            const container = document.getElementById('persona-list');
+            container.innerHTML = '';
+            
+            personas.forEach(persona => {
+                const card = document.createElement('div');
+                card.className = `persona-card ${persona.id === currentPersona ? 'selected' : ''}`;
+                card.innerHTML = `
+                    <div class="persona-name">${persona.name}</div>
+                    <div class="persona-description">${persona.description}</div>
+                `;
+                
+                card.addEventListener('click', async () => {
+                    try {
+                        const resp = await fetch(`${API_BASE}/api/personas/set`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-User-Id': userId,
+                                'X-Auth-Token': authToken || ''
+                            },
+                            body: JSON.stringify({ personaId: persona.id })
+                        });
+                        
+                        if (resp.ok) {
+                            // Update UI immediately
+                            document.querySelectorAll('.persona-card').forEach(c => c.classList.remove('selected'));
+                            card.classList.add('selected');
+                            
+                            // Show confirmation message
+                            addMessage(`Switched to ${persona.name} persona! 🎭 Try asking me something to see the difference.`, 'system');
+                            
+                            // Close modal after short delay
+                            setTimeout(() => {
+                                closePersonaModal();
+                            }, 1500);
+                        } else {
+                            const error = await resp.json();
+                            alert('Failed to set persona: ' + (error.error || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        console.error('Error setting persona:', e);
+                        alert('Error setting persona: ' + e.message);
+                    }
+                });
+                
+                container.appendChild(card);
+            });
+        }
+
         // Profile modal functions
         async function openProfileModal() {
             const modal = document.getElementById('profile-modal');
@@ -1747,6 +1884,7 @@
         }
 
         document.addEventListener('click', (ev) => {
+            if (ev.target && ev.target.id === 'close-persona') closePersonaModal();
             if (ev.target && ev.target.id === 'close-profile') closeProfileModal();
             if (ev.target && ev.target.id === 'close-voice-settings') closeVoiceSettingsModal();
         });

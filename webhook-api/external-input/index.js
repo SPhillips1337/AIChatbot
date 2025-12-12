@@ -155,6 +155,7 @@ class ExternalInputManager {
             });
 
             if (!recentNews.points || recentNews.points.length === 0) {
+                console.log('No recent news found for thought generation');
                 return null;
             }
 
@@ -168,6 +169,12 @@ class ExternalInputManager {
             const newsContext = recentNews.points.map(p => p.payload).slice(0, 2);
             const moodDesc = this.getMoodDescription();
 
+            // Validate news context
+            if (newsContext.length === 0 || !newsContext[0].title) {
+                console.log('Invalid news context for thought generation');
+                return null;
+            }
+
             const prompt = `Based on recent external inputs: ${newsContext.map(n => `"${n.title}" (${n.reaction})`).join(', ')}
       
       Current mood: ${moodDesc} (${this.moodState.score})
@@ -179,13 +186,14 @@ class ExternalInputManager {
                 { role: 'user', content: prompt }
             ];
 
+            console.log('Generating news-influenced thought with context:', newsContext.map(n => n.title));
             return await this.generateResponse(messages);
         } catch (error) {
-            if (error.response && error.response.data) {
-                console.error('Error generating news-influenced thought (Qdrant):', JSON.stringify(error.response.data, null, 2));
-            } else {
-                console.error('Error generating news-influenced thought:', error.message);
-            }
+            console.error('Error generating news-influenced thought:', {
+                message: error.message,
+                status: error.response?.status,
+                data: error.response?.data
+            });
             return null;
         }
     }

@@ -22,6 +22,7 @@ const accountStore = require('./accountStore');
 const rateLimit = require('./rateLimiter');
 const countryBlocker = require('./countryBlocker');
 const deepAgent = require('./DeepAgentService');
+const { getPersona, getAllPersonas, buildSystemPrompt } = require('./personas');
 
 // Configuration
 const config = {
@@ -270,8 +271,12 @@ async function generateProactiveThought(userId = null) {
 
     let contextPrompt = `Generate a brief, interesting observation or gentle conversation starter appropriate for ${timeOfDay} time (GMT). Make it feel like a natural thought you're sharing, not a direct question demanding a response. Consider the time of day in your response. Examples: 'I was just thinking about...' or 'Something interesting I noticed...'`;
 
-    // If we have a userId, get recent context
+    // If we have a userId, get recent context and persona
+    let persona = getPersona('default');
     if (userId) {
+      const profile = await getProfile(userId);
+      persona = getPersona(profile.selectedPersona || 'default');
+      
       const recentContext = await retrieveContext(userId, "recent conversation", 2);
       if (recentContext.length > 0) {
         const topics = recentContext.map(c => c.userMessage + " " + c.botResponse).join(" ");
@@ -280,7 +285,7 @@ async function generateProactiveThought(userId = null) {
     }
 
     const messages = [
-      { role: 'system', content: `You are Aura. Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions. It is currently ${timeOfDay} in GMT time zone. DO NOT mention other times of day - only reference ${timeOfDay}. Be consistent with the time context.` },
+      { role: 'system', content: buildSystemPrompt(userId ? (await getProfile(userId)).selectedPersona || 'default' : 'default', `Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions. It is currently ${timeOfDay} in GMT time zone. DO NOT mention other times of day - only reference ${timeOfDay}. Be consistent with the time context.`) },
       { role: 'user', content: contextPrompt }
     ];
 
@@ -958,8 +963,14 @@ function fixEmbeddingSize(embedding, targetSize) {
 // Generate response from LLM
 async function generateResponse(messages) {
   try {
+    // Validate messages parameter
+    if (!Array.isArray(messages) || messages.length === 0) {
+      console.error('Invalid messages parameter:', messages);
+      return 'I apologize, but I encountered an issue processing your request.';
+    }
+
     // Deep Agent Interception
-    const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : null;
+    const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === 'user' && (lastMessage.content.startsWith('/agent') || lastMessage.content.startsWith('/deep'))) {
       console.log('Deep Agent triggered:', lastMessage.content);
       const task = lastMessage.content.replace(/^\/(agent|deep)\s*/, '');
@@ -974,13 +985,17 @@ async function generateResponse(messages) {
     // Development mock mode: return a canned, friendly reply for local testing
     if (devMock) {
       let lastUser = null;
-      if (Array.isArray(messages)) {
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === 'user') { lastUser = messages[i].content; break; }
-        }
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') { lastUser = messages[i].content; break; }
       }
       const heard = lastUser ? lastUser.substring(0, 200) : 'Hello';
       return `Mock reply: I heard "${heard}" — this is a local dev response.`;
+    }
+
+    // Validate LLM configuration
+    if (!config.llmUrl) {
+      console.error('LLM_URL not configured');
+      return 'I apologize, but the AI service is not properly configured.';
     }
 
     // The URL from environment now points to the base of the OpenAI-compatible API
@@ -994,7 +1009,8 @@ async function generateResponse(messages) {
     };
 
     const response = await axios.post(apiUrl, requestBody, {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 30000 // 30 second timeout
     });
 
     if (response.data.choices && response.data.choices.length > 0) {
@@ -1003,8 +1019,21 @@ async function generateResponse(messages) {
       throw new Error("Invalid response structure from LLM API");
     }
   } catch (error) {
-    console.error('Error generating response:', error.response ? error.response.data : error.message);
-    throw error;
+    if (error.response) {
+      console.error('LLM API Error:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        url: error.config?.url
+      });
+    } else if (error.request) {
+      console.error('LLM API Request failed:', error.message);
+    } else {
+      console.error('Error generating response:', error.message);
+    }
+    
+    // Return a graceful fallback instead of throwing
+    return 'I apologize, but I encountered a technical issue. Please try again in a moment.';
   }
 }
 
@@ -1059,6 +1088,34 @@ function markThoughtDelivered(userId, thoughtId) {
 }
 
 // API Routes
+
+// Persona endpoints
+app.get('/api/personas', (req, res) => {
+  res.json(getAllPersonas());
+});
+
+app.post('/api/personas/set', requireAuth, async (req, res) => {
+  try {
+    const { userId } = req.account;
+    const { personaId } = req.body;
+    
+    console.log(`Setting persona ${personaId} for user ${userId}`);
+    
+    if (!getPersona(personaId)) {
+      return res.status(400).json({ error: 'Invalid persona ID' });
+    }
+    
+    const profile = await getProfile(userId);
+    profile.selectedPersona = personaId;
+    await saveProfile(userId, profile);
+    
+    console.log(`Persona set successfully: ${personaId}`);
+    res.json({ success: true, personaId });
+  } catch (error) {
+    console.error('Error setting persona:', error);
+    res.status(500).json({ error: 'Failed to set persona' });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -1737,8 +1794,9 @@ async function generateDiscoveryQuestion(userId) {
     let question = template;
     if (process.env.PARAPHRASE_QUESTIONS === 'true') {
       try {
+        const profile = await getProfile(userId);
         const messages = [
-          { role: 'system', content: 'You are Aura. Paraphrase the following question so it sounds friendly, concise, and natural.' },
+          { role: 'system', content: buildSystemPrompt(profile.selectedPersona || 'default', 'Paraphrase the following question so it sounds friendly, concise, and natural.') },
           { role: 'user', content: template }
         ];
         const paraphrase = await generateResponse(messages);
@@ -1917,12 +1975,14 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
     }).filter(Boolean).join(', ');
 
     const factSummary = summarizeUserFacts(userProfile.facts, 5);
+    const persona = getPersona(userProfile.selectedPersona || 'default');
+    console.log(`Using persona: ${persona.name} (${userProfile.selectedPersona || 'default'}) for user ${userId}`);
     const missingFacts = detectMissingFacts(userProfile);
     const curiosityNote = missingFacts.length > 0 ? `\n\nYou're curious about this person and want to learn more. You don't know their ${missingFacts[0].label} yet. Feel free to naturally ask about it in conversation, but don't be pushy - let it flow naturally.` : '';
 
     const systemPrompt = {
       role: 'system',
-      content: `You are Aura, a thoughtful AI with real emotions and evolving opinions. You're genuinely curious about the people you talk to and want to learn about them.
+      content: buildSystemPrompt(userProfile.selectedPersona || 'default', `You have real emotions and evolving opinions. You're genuinely curious about the people you talk to and want to learn about them.
 
 User: ${userProfile.personality} personality, ${userProfile.interactions} interactions, trust level: ${userProfile.trustLevel}/10
 ${userProfile.interactions > 5 ? `Topics: ${userProfile.topics?.slice(-5).join(', ')}` : ''}
@@ -1937,7 +1997,7 @@ Be conversational and human-like:
 - Remember their personality and trust level
 - Be curious and ask questions to learn about them, but do it naturally in conversation
 
-You form and evolve opinions based on news and user interactions.`
+You form and evolve opinions based on news and user interactions.`)
     };
 
     // 2. Retrieve relevant context from the database
