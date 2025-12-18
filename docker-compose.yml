@@ -1,4 +1,4 @@
-version: '3'
+
 
 services:
   # Vector Database (Qdrant) - Disabled, using local JSON file instead

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About AURA.ai</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f9;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .menu-bar {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: 1.15em;
+        }
+
+        .menu-links a {
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        
+        .menu-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .content {
+            width: 100%;
+            max-width: 800px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px 40px;
+        }
+
+        h2 {
+            color: #007bff;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+
+        p {
+            line-height: 1.6;
+            color: #333;
+        }
+
+        ul {
+            list-style-type: disc;
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="menu-bar">
+        <div class="brand">
+            <h1>AURA.ai</h1>
+        </div>
+        <div class="menu-links">
+            <a href="index.html">Chat</a>
+            <a href="about.html">About</a>
+            <a href="privacy-policy.html">Privacy Policy</a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <div class="content">
+            <h1>About AURA.ai</h1>
+            <p>
+                AURA.ai is not just another chatbot. It's a proactive AI designed to simulate human-like thinking, complete with memory, an evolving personality, and an awareness of the world around it. Unlike traditional chatbots that only react to your input, AURA.ai can initiate conversations, share thoughts, and engage with you in a more dynamic, natural way.
+            </p>
+
+            <h2>Core Philosophy</h2>
+            <p>
+                The project aims to explore a more sophisticated form of human-computer interaction. By combining a persistent memory, a dynamic emotional state, and real-world context from news and trends, AURA.ai strives to be a conversational partner that learns, adapts, and grows over time.
+            </p>
+
+            <h2>Key Features</h2>
+            <p>What makes AURA.ai different? Here are some of the key capabilities that set it apart:</p>
+            <ul>
+                <li><strong>Proactive Thinking:</strong> AURA.ai doesn't wait for you to start a conversation. It has an "idle timer" and can generate its own thoughts based on past conversations and current events.</li>
+                <li><strong>AI Persona System:</strong> You can choose from multiple AI personalities (like the balanced AURA, the optimistic Sunny, or the analytical Logic), each with a unique speaking style and set of traits that affect every interaction.</li>
+                <li><strong>Evolving Memory:</strong> The chatbot uses a QDRANT vector database to store conversational history and learned facts, allowing for semantic context retrieval. It remembers what you've talked about and can recall user-specific details.</li>
+                <li><strong>World Awareness:</strong> An integrated "External Input System" processes RSS feeds, Twitter trends, and Google trends to keep the AI informed about current events. This data influences its mood and the topics it might bring up.</li>
+                <li><strong>Emotional Intelligence:</strong> AURA.ai tracks an internal "mood score" that shifts based on the sentiment of the news it processes. This emotional state subtly influences its responses and proactive thoughts.</li>
+                <li><strong>Relationship Tracking:</strong> The system can track connections and shared interests between users, with an optional integration for a Neo4j graph database to explore these relationships more deeply.</li>
+                <li><strong>Deep Agents:</strong> For complex tasks, AURA.ai can utilize a sandboxed code execution environment to perform calculations, file manipulation, and other advanced actions safely.</li>
+            </ul>
+
+            <h2>Technology Stack</h2>
+            <p>
+                The AURA.ai system is built on a modern, robust architecture:
+            </p>
+            <ul>
+                <li><strong>Frontend:</strong> A single-page chat interface built with HTML, CSS, and vanilla JavaScript.</li>
+                <li><strong>Backend:</strong> A Node.js server using Express.js for the API and WebSockets for real-time, bidirectional communication.</li>
+                <li><strong>AI & Embeddings:</strong> Connects to any OpenAI-compatible remote endpoint for Large Language Model (LLM) inference and text embeddings.</li>
+                <li><strong>Vector Database:</strong> Utilizes QDRANT for high-speed semantic search and long-term memory storage.</li>
+                <li><strong>Containerization:</strong> The entire application is containerized with Docker for consistent deployment and development.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>&copy; 2025 AURA.ai Project. All Rights Reserved.</p>
+    </div>
+
+</body>
+
+</html>

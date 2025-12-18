@@ -636,14 +636,17 @@
         </div>
         <button id="menuToggle" class="menu-toggle" aria-label="Toggle menu">☰</button>
         <div class="menu-links" id="menuLinks">
+            <a href="index.html">💬 Chat</a>
+            <a href="about.html" target="_blank">ℹ️ About</a>
             <a id="profileLink" href="#">👤 Profile</a>
             <a id="personaLink" href="#">🎭 Persona</a>
             <a href="#" onclick="showVoiceSettings()">🎙️ Voice Settings</a>
-            <a href="#" onclick="showFeedbackForm()">📝 Feedback</a>
-            <a id="dashboardLink" href="#" target="_blank" data-admin-only>📊 Dashboard</a>
             <a href="#" onclick="checkMood()">😊 Mood</a>
-            <a href="#" onclick="processNews()" data-admin-only>📰 News</a>
             <a href="#" onclick="toggleTheme()">🌓 Theme</a>
+            <a href="#" onclick="showFeedbackForm()">📝 Feedback</a>
+            <a href="privacy-policy.html" target="_blank">📜 Privacy</a>
+            <a id="dashboardLink" href="#" target="_blank" data-admin-only>📊 Dashboard</a>
+            <a href="#" onclick="processNews()" data-admin-only>📰 News</a>
             <a href="#" id="switchProfileLink" class="danger">🔐 Switch Profile</a>
         </div>
     </div>
@@ -737,6 +740,18 @@
         </div>
     </div>
 
+    <!-- Features Highlight Modal -->
+    <div id="features-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 500px; text-align: left;">
+            <h2>✨ Discover AURA.ai's Unique Features!</h2>
+            <p style="text-align: center; color: #555;">What makes AURA.ai different from other chatbots?</p>
+            <ul id="features-list" style="list-style: none; padding: 0; margin-top: 20px;">
+                <!-- Features will be loaded here by JavaScript -->
+            </ul>
+            <button id="close-features-modal" style="width: 100%; margin-top: 20px;">Got It!</button>
+        </div>
+    </div>
+
     <!-- Feedback Modal -->
     <div id="feedback-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -770,7 +785,8 @@
     <script>
         const STORAGE_KEYS = {
             auth: 'phpaibot_auth_v1',
-            betaDismissed: 'aura_beta_dismissed_v1'
+            betaDismissed: 'aura_beta_dismissed_v1',
+            featuresDismissed: 'aura_features_dismissed_v1' // New key for features modal
         };
         const LEGACY_KEYS = ['phpaibot_user_id', 'phpaibot_display_name'];
         let userId = null;
@@ -873,11 +889,15 @@
 
             if (!localStorage.getItem(STORAGE_KEYS.betaDismissed)) {
                 betaModal.classList.remove('hidden');
+            } else {
+                // If beta modal was already dismissed, show features modal immediately
+                showFeaturesModal();
             }
 
             closeBetaModal.addEventListener('click', () => {
                 betaModal.classList.add('hidden');
                 localStorage.setItem(STORAGE_KEYS.betaDismissed, 'true');
+                showFeaturesModal(); // Show features modal after beta modal is dismissed
             });
 
             if (dashboardLink) {
@@ -1394,7 +1414,50 @@
 
             // Initialize voice features
             initializeVoiceFeatures();
+
+            // After beta modal is handled, show features modal
+            showFeaturesModal();
         } // Close initializeChatApp function
+
+        // Features Highlight Modal Logic
+        function showFeaturesModal() {
+            const featuresModal = document.getElementById('features-modal');
+            const closeFeaturesModal = document.getElementById('close-features-modal');
+            const featuresList = document.getElementById('features-list');
+
+            if (localStorage.getItem(STORAGE_KEYS.featuresDismissed)) {
+                return;
+            }
+
+            // Populate features from project.json's currentCapabilities
+            const features = [
+                "AI Persona System with 5 distinct personalities (AURA, Sunny, Logic, Muse, Sage).",
+                "Proactive engagement: AI initiates conversations based on thoughts and events.",
+                "Evolving Memory: Remembers past conversations and user-specific facts.",
+                "World Awareness: Stays informed via RSS, Twitter, and Google Trends.",
+                "Emotional Intelligence: Tracks mood, influencing responses and thoughts.",
+                "Relationship Tracking: Understands user connections and shared interests.",
+                "Deep Agents: Executes code in sandboxed environment for complex tasks.",
+                "Production hardening: Rate limiting, memory management, error handling, health monitoring.",
+                "Basic GDPR compliance: Consent, privacy policy, data export/deletion."
+            ];
+
+            featuresList.innerHTML = ''; // Clear existing list
+            features.forEach(feature => {
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `✨ ${feature}`;
+                listItem.style.marginBottom = '10px';
+                listItem.style.paddingLeft = '5px';
+                featuresList.appendChild(listItem);
+            });
+
+            featuresModal.classList.remove('hidden');
+
+            closeFeaturesModal.addEventListener('click', () => {
+                featuresModal.classList.add('hidden');
+                localStorage.setItem(STORAGE_KEYS.featuresDismissed, 'true');
+            });
+        }
 
         // Voice Features
         function initializeVoiceFeatures() {
