@@ -13,3 +13,12 @@ webhook-api/accounts.json
 temp.txt
 webhook-api/news-data.json
 webhook-api/profile.json
+webhook-api/IP2LOCATION-LITE-DB1.CSV
+pip-install.log
+webhook-api/news-data.json
+webhook-api/package-lock.json
+webhook-api/profile.json
+webhook-api/server.log
+webhook-api/external-input/twitter-tokens.json
+webhook-api/telemetry.json
+webhook-api/thoughts/*
