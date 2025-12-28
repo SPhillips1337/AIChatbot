@@ -815,7 +815,7 @@
         // GDPR Consent Management
         function checkGDPRConsent() {
             const consent = localStorage.getItem('gdpr-consent');
-            if (!consent) {
+            if (!consent || consent === 'declined') {
                 document.getElementById('gdpr-banner').style.display = 'block';
                 return false;
             }
