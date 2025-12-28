@@ -16,7 +16,7 @@ class ExternalInputManager {
         this.statePath = path.join(__dirname, '../news-data.json');
         this.loadMoodState();
 
-        this.sources = [rssSource, twitterSource, googleTrendsSource];
+        this.sources = [rssSource /*, twitterSource, googleTrendsSource */];
     }
 
     async processAll() {
@@ -125,7 +125,7 @@ class ExternalInputManager {
     async storeInput(item, fullContext, analysis) {
         const embedding = await this.generateEmbedding(`${item.title} ${analysis.reaction}`);
         // Pad/Truncate embedding to 1024
-        const finalEmbedding = this.fixEmbeddingSize(embedding, 1024);
+        const finalEmbedding = embedding;
 
         await this.qdrant.upsert(this.config.collectionName, {
             points: [{

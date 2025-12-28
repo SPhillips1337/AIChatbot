@@ -88,8 +88,10 @@ const ADMIN_USER_IDS = new Set([
 
 
 async function ensureAccountRole(account) {
+  console.log(`[DEBUG] ensureAccountRole for ${account?.userId}`);
   if (!account) return 'user';
   if (ADMIN_USER_IDS.has(account.userId)) {
+    console.log(`[DEBUG] Assigning admin role...`);
     await accountStore.assignRoleByUserId(account.userId, 'admin');
     account.role = 'admin';
   }
@@ -102,10 +104,18 @@ async function ensureAccountRole(account) {
 async function authenticateRequest(req) {
   const userId = req.headers['x-user-id'];
   const token = req.headers['x-auth-token'];
+  console.log(`[DEBUG] authenticateRequest: ${userId}`);
   if (!userId || !token) return null;
   const account = accountStore.getAccountById(userId);
-  if (!account) return null;
-  if (!await accountStore.verifySessionToken(userId, token)) return null;
+  if (!account) {
+    console.log(`[DEBUG] Account not found for ${userId}`);
+    return null;
+  }
+
+  const isValid = await accountStore.verifySessionToken(userId, token);
+  console.log(`[DEBUG] Token valid? ${isValid}`);
+  if (!isValid) return null;
+
   await ensureAccountRole(account);
   return account;
 }
@@ -114,7 +124,9 @@ function requireAuth(options = {}) {
   const { admin = false } = options;
   return async (req, res, next) => {
     try {
+      console.log(`[DEBUG] requireAuth starting...`);
       const account = await authenticateRequest(req);
+      console.log(`[DEBUG] requireAuth account found: ${!!account}`);
       if (!account) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
@@ -274,9 +286,9 @@ async function generateProactiveThought(userId = null) {
     // If we have a userId, get recent context and persona
     let persona = getPersona('default');
     if (userId) {
-      const profile = await getProfile(userId);
+      const profile = await profileStore.getProfile(userId);
       persona = getPersona(profile.selectedPersona || 'default');
-      
+
       const recentContext = await retrieveContext(userId, "recent conversation", 2);
       if (recentContext.length > 0) {
         const topics = recentContext.map(c => c.userMessage + " " + c.botResponse).join(" ");
@@ -285,7 +297,7 @@ async function generateProactiveThought(userId = null) {
     }
 
     const messages = [
-      { role: 'system', content: buildSystemPrompt(userId ? (await getProfile(userId)).selectedPersona || 'default' : 'default', `Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions. It is currently ${timeOfDay} in GMT time zone. DO NOT mention other times of day - only reference ${timeOfDay}. Be consistent with the time context.`) },
+      { role: 'system', content: buildSystemPrompt(userId ? (await profileStore.getProfile(userId)).selectedPersona || 'default' : 'default', `Generate natural, thoughtful observations that feel like genuine thoughts being shared, not interview questions. It is currently ${timeOfDay} in GMT time zone. DO NOT mention other times of day - only reference ${timeOfDay}. Be consistent with the time context.`) },
       { role: 'user', content: contextPrompt }
     ];
 
@@ -823,6 +835,20 @@ async function initializeCollection() {
       const testEmbedding = await generateEmbeddings('test');
       if (testEmbedding && testEmbedding.length !== VECTOR_SIZE) {
         console.warn(`WARNING: Embedding size mismatch! Collection expects ${VECTOR_SIZE}, got ${testEmbedding.length}`);
+        console.warn('Automatically fixing mismatch by recreating collection (DATA LOSS WARNING)...');
+
+        try {
+          await qdrant.deleteCollection(config.collectionName);
+          console.log('Deleted mismatched collection.');
+
+          VECTOR_SIZE = testEmbedding.length;
+          await qdrant.createCollection(config.collectionName, {
+            vectors: { size: VECTOR_SIZE, distance: 'Cosine' }
+          });
+          console.log(`Recreated collection with correct size: ${VECTOR_SIZE}`);
+        } catch (err) {
+          console.error('Failed to recreate collection:', err);
+        }
       }
     }
   } catch (error) {
@@ -1031,7 +1057,7 @@ async function generateResponse(messages) {
     } else {
       console.error('Error generating response:', error.message);
     }
-    
+
     // Return a graceful fallback instead of throwing
     return 'I apologize, but I encountered a technical issue. Please try again in a moment.';
   }
@@ -1094,21 +1120,27 @@ app.get('/api/personas', (req, res) => {
   res.json(getAllPersonas());
 });
 
-app.post('/api/personas/set', requireAuth, async (req, res) => {
+app.post('/api/personas/set', requireAuth(), async (req, res) => {
   try {
     const { userId } = req.account;
     const { personaId } = req.body;
-    
+
     console.log(`Setting persona ${personaId} for user ${userId}`);
-    
+
     if (!getPersona(personaId)) {
       return res.status(400).json({ error: 'Invalid persona ID' });
     }
-    
-    const profile = await getProfile(userId);
+
+    console.log(`[DEBUG] Fetching profile for user ${userId}...`);
+    const profile = await profileStore.getProfile(userId);
+    console.log(`[DEBUG] Profile fetched. Current persona: ${profile?.selectedPersona}`);
+
     profile.selectedPersona = personaId;
-    await saveProfile(userId, profile);
-    
+
+    console.log(`[DEBUG] Saving profile for user ${userId}...`);
+    await profileStore.saveProfile(userId, profile);
+    console.log(`[DEBUG] Profile saved.`);
+
     console.log(`Persona set successfully: ${personaId}`);
     res.json({ success: true, personaId });
   } catch (error) {
@@ -1794,7 +1826,7 @@ async function generateDiscoveryQuestion(userId) {
     let question = template;
     if (process.env.PARAPHRASE_QUESTIONS === 'true') {
       try {
-        const profile = await getProfile(userId);
+        const profile = await profileStore.getProfile(userId);
         const messages = [
           { role: 'system', content: buildSystemPrompt(profile.selectedPersona || 'default', 'Paraphrase the following question so it sounds friendly, concise, and natural.') },
           { role: 'user', content: template }

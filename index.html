@@ -164,6 +164,23 @@
             align-self: flex-end;
         }
 
+        .system-message {
+            align-items: center;
+        }
+
+        .system-message .sender {
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .system-message .text {
+            background-color: #f8f9fa;
+            color: #495057;
+            border: 1px solid #dee2e6;
+            font-style: italic;
+            text-align: center;
+        }
+
         .error-message {
             text-align: center;
             color: #dc3545;
@@ -328,8 +345,21 @@
         }
 
         .persona-card.selected {
-            border-color: #007bff;
-            background: #f8f9ff;
+            border-color: #28a745;
+            background: #e8f5e9;
+            box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+            position: relative;
+            border-width: 2px;
+        }
+
+        .persona-card.selected::after {
+            content: "✓ Active";
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #28a745;
+            font-weight: bold;
+            font-size: 0.9em;
         }
 
         .persona-name {
@@ -1221,6 +1251,8 @@
                         addSpeakButton(messageDiv, message);
                         // Auto-read if enabled
                         setTimeout(() => speakText(message, true), 100);
+                    } else if (sender === 'System' || sender === 'system') {
+                        messageDiv.classList.add('system-message');
                     } else {
                         messageDiv.classList.add('user-message');
                     }
@@ -1231,6 +1263,7 @@
                 chatBox.appendChild(messageDiv);
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
+            window.addMessage = addMessage;
 
             // Enhanced message rendering with code blocks
             function renderMessageWithCodeBlocks(message) {
@@ -1908,12 +1941,36 @@
                             card.classList.add('selected');
 
                             // Show confirmation message
-                            addMessage(`Switched to ${persona.name} persona! 🎭 Try asking me something to see the difference.`, 'system');
+                            addMessage('System', `Switched to ${persona.name} persona! 🎭`);
 
-                            // Close modal after short delay
+                            // Trigger immediate AI greeting
+                            try {
+                                const greetResp = await fetch(`${API_BASE}/api/chat`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-User-Id': userId,
+                                        'X-Auth-Token': authToken || ''
+                                    },
+                                    body: JSON.stringify({
+                                        userId,
+                                        message: `[Internal Note]: User just switched to your persona (${persona.name}). Please provide a brief, 1-sentence greeting that strongly showcases your personality traits.`
+                                    })
+                                });
+                                if (greetResp.ok) {
+                                    const greetData = await greetResp.json();
+                                    if (greetData.message) {
+                                        addMessage('AI', greetData.message);
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Failed to fetch greeting', e);
+                            }
+
+                            // Close modal after delay to show active state
                             setTimeout(() => {
                                 closePersonaModal();
-                            }, 1500);
+                            }, 2000);
                         } else {
                             const error = await resp.json();
                             alert('Failed to set persona: ' + (error.error || 'Unknown error'));
