@@ -1001,7 +1001,10 @@ async function generateResponse(messages) {
       console.log('Deep Agent triggered:', lastMessage.content);
       const task = lastMessage.content.replace(/^\/(agent|deep)\s*/, '');
       try {
-        return await deepAgent.agenticLoop(task);
+        // Pass generateResponse as the LLM provider
+        // We need to bind it or ensure it has access to its closure if needed,
+        // but generateResponse here is a standalone function in this scope.
+        return await deepAgent.agenticLoop(task, generateResponse);
       } catch (err) {
         console.error('Deep Agent failed:', err);
         return `Deep Agent encountered an error: ${err.message}`;
