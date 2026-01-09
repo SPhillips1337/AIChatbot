@@ -22,3 +22,4 @@ webhook-api/server.log
 webhook-api/external-input/twitter-tokens.json
 webhook-api/telemetry.json
 webhook-api/thoughts/*
+node_modules/

@@ -1001,7 +1001,10 @@ async function generateResponse(messages) {
       console.log('Deep Agent triggered:', lastMessage.content);
       const task = lastMessage.content.replace(/^\/(agent|deep)\s*/, '');
       try {
-        return await deepAgent.agenticLoop(task);
+        // Pass generateResponse as the LLM provider
+        // We need to bind it or ensure it has access to its closure if needed,
+        // but generateResponse here is a standalone function in this scope.
+        return await deepAgent.agenticLoop(task, generateResponse);
       } catch (err) {
         console.error('Deep Agent failed:', err);
         return `Deep Agent encountered an error: ${err.message}`;
@@ -2082,73 +2085,77 @@ You form and evolve opinions based on news and user interactions.`)
     // 6. Check if user is asking about mood/feelings and inject real data
     const factAnswer = resolveFactQuestion(lowerMessage, currentUserProfile);
 
-    if (factAnswer) {
-      botResponse = factAnswer;
-    } else if (lowerMessage.includes('how are you feeling') || lowerMessage.includes('what\'s your mood') || (lowerMessage.includes('feel') && lowerMessage.includes('?'))) {
-      // Only inject mood for direct mood questions, not casual mentions of "feel"
-      const mood = await aiTools.checkMood();
-      const news = await aiTools.getRecentNews(2);
+    const isAgentCommand = lowerMessage.startsWith('/agent') || lowerMessage.startsWith('/deep');
 
-      botResponse = `I'm ${mood.description} right now (${mood.score}). ${news[0] ? `"${news[0].title}" has been weighing on me - ${news[0].reaction.split('.')[0]}.` : 'Been processing some heavy news lately.'}`;
-    } else if (explicitNewsRequest) {
-      // 7. Check if user is asking about news
-      const news = await aiTools.getRecentNews(3);
-      if (news.length > 0) {
-        botResponse = `Here’s the latest that’s been on my radar:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
-      } else {
-        botResponse = "I've been scanning the feeds but nothing noteworthy has stuck just yet.";
-      }
-    } else if (mentionsNews && (lowerMessage.includes('current') || lowerMessage.includes('events') || lowerMessage.includes('happening'))) {
-      // Only append news context when user is discussing current events, not casual mentions
-      const news = await aiTools.getRecentNews(2);
-      if (news.length > 0) {
-        const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
-        botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They've been shaping how I talk about current events.`;
-      }
-    }
+    if (!isAgentCommand) {
+      if (factAnswer) {
+        botResponse = factAnswer;
+      } else if (lowerMessage.includes('how are you feeling') || lowerMessage.includes('what\'s your mood') || (lowerMessage.includes('feel') && lowerMessage.includes('?'))) {
+        // Only inject mood for direct mood questions, not casual mentions of "feel"
+        const mood = await aiTools.checkMood();
+        const news = await aiTools.getRecentNews(2);
 
-    // 8.5. Occasionally append a discovery question if we're missing facts and the conversation feels natural
-    // Only do this if we didn't already answer a fact question or handle mood/news specially
-    if (!factAnswer && !lowerMessage.includes('feel') && !lowerMessage.includes('mood') && !mentionsNews) {
-      const stillMissing = detectMissingFacts(currentUserProfile);
-      // 15% chance to ask, higher if we know very little (30% if factCount < 2)
-      const factCount = Object.keys(currentUserProfile.facts || {}).filter(k => currentUserProfile.facts[k]?.value).length;
-      const askChance = factCount < 2 ? 0.3 : 0.15;
-
-      if (stillMissing.length > 0 && Math.random() < askChance) {
-        const discoveryQuestion = await generateDiscoveryQuestion(userId);
-        // discoveryQuestion may be a string (legacy) or an object { question, key }
-        let dqText = null;
-        let dqKey = null;
-        if (discoveryQuestion) {
-          if (typeof discoveryQuestion === 'string') {
-            dqText = discoveryQuestion;
-          } else if (typeof discoveryQuestion === 'object' && discoveryQuestion.question) {
-            dqText = discoveryQuestion.question;
-            dqKey = discoveryQuestion.key || null;
-          }
+        botResponse = `I'm ${mood.description} right now (${mood.score}). ${news[0] ? `"${news[0].title}" has been weighing on me - ${news[0].reaction.split('.')[0]}.` : 'Been processing some heavy news lately.'}`;
+      } else if (explicitNewsRequest) {
+        // 7. Check if user is asking about news
+        const news = await aiTools.getRecentNews(3);
+        if (news.length > 0) {
+          botResponse = `Here’s the latest that’s been on my radar:\n${news.map(story => `• ${story.title} (${story.mood > 0 ? '😊' : story.mood < 0 ? '😔' : '😐'})`).join('\n')}`;
+        } else {
+          botResponse = "I've been scanning the feeds but nothing noteworthy has stuck just yet.";
         }
+      } else if (mentionsNews && (lowerMessage.includes('current') || lowerMessage.includes('events') || lowerMessage.includes('happening'))) {
+        // Only append news context when user is discussing current events, not casual mentions
+        const news = await aiTools.getRecentNews(2);
+        if (news.length > 0) {
+          const highlights = news.map(story => `"${story.title}" (${story.mood > 0 ? 'leaned positive' : story.mood < 0 ? 'felt heavy' : 'felt neutral'})`).join(' and ');
+          botResponse += `\n\nBy the way, I've been mulling over ${highlights}. They've been shaping how I talk about current events.`;
+        }
+      }
 
-        if (dqText) {
-          try {
-            const snippet = dqText.substring(0, 20).toLowerCase();
-            if (!botResponse.toLowerCase().includes(snippet)) {
-              // Only append if the question isn't already in the response
+      // 8.5. Occasionally append a discovery question if we're missing facts and the conversation feels natural
+      // Only do this if we didn't already answer a fact question or handle mood/news specially
+      if (!factAnswer && !lowerMessage.includes('feel') && !lowerMessage.includes('mood') && !mentionsNews) {
+        const stillMissing = detectMissingFacts(currentUserProfile);
+        // 15% chance to ask, higher if we know very little (30% if factCount < 2)
+        const factCount = Object.keys(currentUserProfile.facts || {}).filter(k => currentUserProfile.facts[k]?.value).length;
+        const askChance = factCount < 2 ? 0.3 : 0.15;
+
+        if (stillMissing.length > 0 && Math.random() < askChance) {
+          const discoveryQuestion = await generateDiscoveryQuestion(userId);
+          // discoveryQuestion may be a string (legacy) or an object { question, key }
+          let dqText = null;
+          let dqKey = null;
+          if (discoveryQuestion) {
+            if (typeof discoveryQuestion === 'string') {
+              dqText = discoveryQuestion;
+            } else if (typeof discoveryQuestion === 'object' && discoveryQuestion.question) {
+              dqText = discoveryQuestion.question;
+              dqKey = discoveryQuestion.key || null;
+            }
+          }
+
+          if (dqText) {
+            try {
+              const snippet = dqText.substring(0, 20).toLowerCase();
+              if (!botResponse.toLowerCase().includes(snippet)) {
+                // Only append if the question isn't already in the response
+                botResponse += ` ${dqText}`;
+              }
+            } catch (e) {
+              // Fallback: append raw text if any error
               botResponse += ` ${dqText}`;
             }
-          } catch (e) {
-            // Fallback: append raw text if any error
-            botResponse += ` ${dqText}`;
-          }
 
-          // If we have a websocket for this user, also send a structured discovery_message
-          try {
-            const ws = userSockets.get(userId);
-            if (ws && ws.readyState === require('ws').OPEN) {
-              ws.send(JSON.stringify({ sender: 'AI', type: 'discovery_question', key: dqKey, message: dqText, timestamp: new Date().toISOString() }));
+            // If we have a websocket for this user, also send a structured discovery_message
+            try {
+              const ws = userSockets.get(userId);
+              if (ws && ws.readyState === require('ws').OPEN) {
+                ws.send(JSON.stringify({ sender: 'AI', type: 'discovery_question', key: dqKey, message: dqText, timestamp: new Date().toISOString() }));
+              }
+            } catch (e) {
+              console.warn('Failed to send discovery_question WS:', e.message || e);
             }
-          } catch (e) {
-            console.warn('Failed to send discovery_question WS:', e.message || e);
           }
         }
       }
