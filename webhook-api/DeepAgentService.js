@@ -23,9 +23,9 @@ class DeepAgentService {
     async connect() {
         return new Promise((resolve, reject) => {
             const conn = new Client();
-            
+
             console.log(`Attempting SSH connection to ${this.config.host}:${this.config.port} as ${this.config.username}`);
-            
+
             conn.on('ready', () => {
                 console.log('SSH connection established successfully');
                 resolve(conn);
@@ -73,10 +73,10 @@ class DeepAgentService {
 
     async runCode(code, language = 'php') {
         const filename = `task_${Date.now()}.${this.getExtension(language)}`;
-        
+
         // Use proper file writing instead of echo to prevent injection
         const tempFile = `/tmp/${filename}`;
-        
+
         let cmd;
         switch (language.toLowerCase()) {
             case 'php': cmd = `php ${tempFile}`; break;
@@ -91,14 +91,14 @@ class DeepAgentService {
                 // First write the file using SFTP
                 conn.sftp((err, sftp) => {
                     if (err) return reject(err);
-                    
+
                     sftp.writeFile(tempFile, code, (err) => {
                         if (err) return reject(err);
-                        
+
                         // Then execute it
                         conn.exec(`${cmd} && rm ${tempFile}`, (err, stream) => {
                             if (err) return reject(err);
-                            
+
                             let stdout = '';
                             let stderr = '';
                             stream.on('close', (code, signal) => {
@@ -197,6 +197,13 @@ Begin!`;
             const inputRegex = /Action Input:([\s\S]*)/i;
             const inputMatch = response.match(inputRegex);
             let actionInput = inputMatch ? inputMatch[1].trim() : '';
+
+            // Fix: The LLM sometimes hallucinates the 'Observation:' part. We must strip it.
+            // Also handle newlines before Observation
+            const observationSplit = actionInput.split(/\nObservation:/i);
+            if (observationSplit.length > 1) {
+                actionInput = observationSplit[0].trim();
+            }
 
             // Handle "Finish"
             if (action.toLowerCase() === 'finish') {

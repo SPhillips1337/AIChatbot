@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SSH_PASS: opencodepass
     restart: unless-stopped
     ports:
       - "8080:80"
